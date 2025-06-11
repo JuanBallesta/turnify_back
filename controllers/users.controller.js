@@ -4,10 +4,28 @@ const users = db.users;
 
 // Crear un nuevo usuario (registro)
 exports.createUser = async (req, res) => {
-  const { name, lastName, userName, phone, email, notes, password, photo } =
-    req.body;
+  const { name, lastName, userName, phone, email, password } = req.body;
+
+  if (!name || !lastName || !userName || !email || !password || !phone) {
+    return res
+      .status(400)
+      .json({ ok: false, msg: "Todos los campos son requeridos." });
+  }
 
   try {
+    const existingUser = await users.findOne({
+      where: { [db.Sequelize.Op.or]: [{ email }, { userName }] },
+    });
+
+    if (existingUser) {
+      const field =
+        existingUser.email === email ? "email" : "nombre de usuario";
+      return res.status(409).json({
+        ok: false,
+        msg: `El ${field} ya está en uso.`,
+      });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = await users.create({
@@ -16,17 +34,27 @@ exports.createUser = async (req, res) => {
       userName,
       phone,
       email,
-      notes,
       password: hashedPassword,
-      photo,
     });
+
+    const userResponse = {
+      id: newUser.id,
+      name: newUser.name,
+      lastName: newUser.lastName,
+      userName: newUser.userName,
+      email: newUser.email,
+      phone: newUser.phone,
+      notes: newUser.notes,
+      photo: newUser.photo,
+    };
 
     res.status(201).json({
       ok: true,
       msg: "Usuario registrado correctamente.",
-      data: newUser,
+      data: userResponse,
     });
   } catch (error) {
+    console.error("Error al crear usuario:", error);
     res.status(500).json({
       ok: false,
       msg: "Error al crear el usuario.",
@@ -91,7 +119,6 @@ exports.updateUser = async (req, res) => {
       .status(403)
       .json({ ok: false, msg: "No tienes permiso para esta acción." });
   }
-  // También es una buena idea verificar que el rol del token sea 'client'
   if (authenticatedUser.role !== "client") {
     return res
       .status(403)
