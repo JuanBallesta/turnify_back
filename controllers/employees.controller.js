@@ -125,60 +125,68 @@ exports.getOneEmployee = (req, res) => {
 
 // Actualizar un empleado
 exports.updateEmployee = async (req, res) => {
-  const id = req.params.id;
-  const {
-    name,
-    lastName,
-    username,
-    password,
-    email,
-    phone,
-    businessId,
-    userTypeId,
-  } = req.body;
+  const employeeIdToUpdate = req.params.id;
+  const authenticatedUser = req.user;
+
+  if (
+    authenticatedUser.role !== "administrator" &&
+    authenticatedUser.role !== "superuser" &&
+    parseInt(authenticatedUser.id) !== parseInt(employeeIdToUpdate)
+  ) {
+    return res.status(403).json({
+      ok: false,
+      msg: "Acceso denegado. No tienes permiso para modificar este perfil.",
+    });
+  }
 
   try {
-    const employeeData = await employee.findByPk(id);
-
-    if (!employeeData) {
-      return res.status(404).json({
-        ok: false,
-        msg: "Empleado no encontrado.",
-        status: 404,
-      });
+    const employeeToUpdate = await employee.findByPk(employeeIdToUpdate);
+    if (!employeeToUpdate) {
+      return res
+        .status(404)
+        .json({ ok: false, msg: "Empleado no encontrado." });
     }
 
-    // Preparamos los campos a actualizar
-    let updatedFields = {
-      name,
-      lastName,
-      username,
-      email,
-      phone,
-      businessId,
-      userTypeId,
+    const { name, lastName, phone, notes } = req.body;
+    const updatedFields = {
+      name: name ?? employeeToUpdate.name,
+      lastName: lastName ?? employeeToUpdate.lastName,
+      phone: phone ?? employeeToUpdate.phone,
+      notes: notes ?? employeeToUpdate.notes,
     };
 
-    // Si hay nueva password, la hasheamos antes
-    if (password) {
-      const hashedPassword = await bcrypt.hash(password, 10);
-      updatedFields.password = hashedPassword;
-    }
+    await employeeToUpdate.update(updatedFields);
 
-    await employeeData.update(updatedFields);
+    const updatedEmployeeWithRole = await employee.findByPk(
+      employeeIdToUpdate,
+      {
+        include: [{ model: userTypes, as: "userType", attributes: ["name"] }],
+      }
+    );
+
+    const userResponse = {
+      id: updatedEmployeeWithRole.id,
+      name: updatedEmployeeWithRole.name,
+      lastName: updatedEmployeeWithRole.lastName,
+      userName: updatedEmployeeWithRole.userName,
+      email: updatedEmployeeWithRole.email,
+      phone: updatedEmployeeWithRole.phone,
+      notes: updatedEmployeeWithRole.notes,
+      photo: updatedEmployeeWithRole.photo,
+      role: updatedEmployeeWithRole.userType.name,
+    };
 
     res.status(200).json({
       ok: true,
-      msg: "Empleado actualizado.",
-      status: 200,
-      data: employeeData,
+      msg: "Empleado actualizado correctamente.",
+      user: userResponse,
     });
   } catch (error) {
+    console.error("Error al actualizar el empleado:", error);
     res.status(500).json({
       ok: false,
       msg: "Error al actualizar el empleado.",
-      status: 500,
-      data: error.message || error,
+      error: error.message || error,
     });
   }
 };
@@ -186,31 +194,32 @@ exports.updateEmployee = async (req, res) => {
 // Eliminar un empleado
 exports.deleteEmployee = (req, res) => {
   const id = req.params.id;
-  employee
-    .destroy({ where: { id } })
+  const authenticatedUser = req.user;
+
+  if (
+    authenticatedUser.role !== "administrator" &&
+    authenticatedUser.role !== "superuser"
+  ) {
+    return res.status(403).json({ ok: false, msg: "Acceso denegado." });
+  }
+
+  Employee.destroy({ where: { id } })
     .then((rowsDeleted) => {
       if (rowsDeleted > 0) {
-        res.status(200).json({
-          ok: true,
-          msg: "Empleado eliminado.",
-          status: 200,
-          data: rowsDeleted,
-        });
+        res
+          .status(200)
+          .json({ ok: true, msg: "Empleado eliminado.", data: rowsDeleted });
       } else {
-        res.status(404).json({
-          ok: false,
-          msg: "Empleado no encontrado.",
-          status: 404,
-          data: null,
-        });
+        res.status(404).json({ ok: false, msg: "Empleado no encontrado." });
       }
     })
-    .catch((error) => {
-      res.status(500).json({
-        ok: false,
-        msg: "Error al eliminar el empleado.",
-        status: 500,
-        data: error.message || error,
-      });
-    });
+    .catch((error) =>
+      res
+        .status(500)
+        .json({
+          ok: false,
+          msg: "Error al eliminar el empleado.",
+          error: error.message || error,
+        })
+    );
 };

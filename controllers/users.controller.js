@@ -83,40 +83,53 @@ exports.getOneUser = async (req, res) => {
 
 // Actualizar un usuario
 exports.updateUser = async (req, res) => {
-  const id = req.params.id;
-  const { name, lastName, userName, phone, email, notes, photo } = req.body;
+  const userIdFromParams = req.params.id;
+  const authenticatedUser = req.user;
+
+  if (Number(userIdFromParams) !== Number(authenticatedUser.id)) {
+    return res
+      .status(403)
+      .json({ ok: false, msg: "No tienes permiso para esta acción." });
+  }
+  // También es una buena idea verificar que el rol del token sea 'client'
+  if (authenticatedUser.role !== "client") {
+    return res
+      .status(403)
+      .json({ ok: false, msg: "Ruta no válida para este tipo de usuario." });
+  }
 
   try {
-    const user = await users.findByPk(id);
+    const userToUpdate = await users.findByPk(authenticatedUser.id);
+    if (!userToUpdate)
+      return res.status(404).json({ ok: false, msg: "Usuario no encontrado." });
 
-    if (!user) {
-      return res.status(404).json({
-        ok: false,
-        msg: "Usuario no encontrado.",
-      });
-    }
+    const { name, lastName, phone, notes } = req.body;
+    userToUpdate.name = name ?? userToUpdate.name;
+    userToUpdate.lastName = lastName ?? userToUpdate.lastName;
+    userToUpdate.phone = phone ?? userToUpdate.phone;
+    userToUpdate.notes = notes ?? userToUpdate.notes;
 
-    await user.update({
-      name,
-      lastName,
-      userName,
-      phone,
-      email,
-      notes,
-      photo,
-    });
+    await userToUpdate.save();
 
-    res.status(200).json({
-      ok: true,
-      msg: "Usuario actualizado.",
-      data: User,
-    });
+    const userResponse = {
+      id: userToUpdate.id,
+      name: userToUpdate.name,
+      lastName: userToUpdate.lastName,
+      userName: userToUpdate.userName,
+      email: userToUpdate.email,
+      phone: userToUpdate.phone,
+      notes: userToUpdate.notes,
+      photo: userToUpdate.photo,
+      role: "client",
+    };
+
+    res
+      .status(200)
+      .json({ ok: true, msg: "Perfil actualizado.", user: userResponse });
   } catch (error) {
-    res.status(500).json({
-      ok: false,
-      msg: "Error al actualizar el usuario.",
-      error: error.message || error,
-    });
+    res
+      .status(500)
+      .json({ ok: false, msg: "Error en el servidor.", error: error.message });
   }
 };
 

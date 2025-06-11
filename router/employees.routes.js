@@ -1,10 +1,11 @@
 const Routes = require("express").Router();
 const employeeController = require("../controllers/employees.controller");
+const authenticateToken = require("../middlewares/authenticateToken"); // Apunta al middleware universal
 
 Routes.post("/", employeeController.createEmployee);
-Routes.get("/", employeeController.getAllEmployees);
-Routes.get("/:id", employeeController.getOneEmployee);
-Routes.put("/:id", employeeController.updateEmployee);
-Routes.delete("/:id", employeeController.deleteEmployee);
+Routes.get("/", authenticateToken, employeeController.getAllEmployees);
+Routes.get("/:id", authenticateToken, employeeController.getOneEmployee);
+Routes.put("/:id", authenticateToken, employeeController.updateEmployee);
+Routes.delete("/:id", authenticateToken, employeeController.deleteEmployee);
 
 module.exports = Routes;

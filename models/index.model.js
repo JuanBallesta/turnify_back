@@ -30,8 +30,14 @@ db.users = require("./users.model")(sequelize, Sequelize);
 // Relaciones entre modelos
 
 //Un empleado puede tener un solo tipo de usuario
-db.userTypes.hasMany(db.employees);
-db.employees.belongsTo(db.userTypes);
+db.employees.belongsTo(db.userTypes, {
+  foreignKey: "userTypeId",
+  as: "userType",
+});
+db.userTypes.hasMany(db.employees, {
+  foreignKey: "userTypeId",
+  as: "employees",
+});
 
 // Un negocio puede tener una sola industria
 db.industries.hasMany(db.businesses);

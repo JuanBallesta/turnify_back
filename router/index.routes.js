@@ -20,6 +20,9 @@ module.exports = (app) => {
   const userTypeRoutes = require("./userTypes.routes");
   app.use("/userTypes", userTypeRoutes);
 
-  const userRoutes = require("./users.routes");
+  const userRoutes = require("./users/users.routes");
   app.use("/users", userRoutes);
+  // Rutas de admin
+  const userAdminRoutes = require("./employees/users.routes");
+  app.use("/admin/users", userAdminRoutes);
 };
