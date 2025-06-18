@@ -12,6 +12,7 @@ router.post("/register", authController.register);
 router.post("/admin/login", authController.login);
 router.post("/admin/refreshToken", authenticateAdminToken);
 
+// Client Login
 router.post("/login", authClients.login);
 router.post("/refreshToken", authenticateToken);
 

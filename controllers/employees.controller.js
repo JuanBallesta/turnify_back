@@ -48,17 +48,19 @@ exports.createEmployee = async (req, res) => {
   }
 };
 
-// Obtener todos los empleados con su negocio asociado
+// Obtener todos los empleados con su negocio y rol asociados
 exports.getAllEmployees = (req, res) => {
   employee
     .findAll({
       include: [
         {
           model: business,
+          as: "business", // AÑADIR ALIAS (asumo que se llama 'business')
           attributes: ["id", "name"],
         },
         {
           model: userTypes,
+          as: "userType",
           attributes: ["id", "name"],
         },
       ],
@@ -81,7 +83,7 @@ exports.getAllEmployees = (req, res) => {
     });
 };
 
-// Obtener un empleado por ID con su negocio
+// Obtener un empleado por ID con su negocio y rol
 exports.getOneEmployee = (req, res) => {
   const id = req.params.id;
   employee
@@ -90,10 +92,12 @@ exports.getOneEmployee = (req, res) => {
       include: [
         {
           model: business,
+          as: "business",
           attributes: ["id", "name"],
         },
         {
           model: userTypes,
+          as: "userType",
           attributes: ["id", "name"],
         },
       ],
@@ -214,12 +218,10 @@ exports.deleteEmployee = (req, res) => {
       }
     })
     .catch((error) =>
-      res
-        .status(500)
-        .json({
-          ok: false,
-          msg: "Error al eliminar el empleado.",
-          error: error.message || error,
-        })
+      res.status(500).json({
+        ok: false,
+        msg: "Error al eliminar el empleado.",
+        error: error.message || error,
+      })
     );
 };

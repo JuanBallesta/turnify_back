@@ -1,6 +1,7 @@
 const Routes = require("express").Router();
 const userController = require("../../controllers/users.controller");
 const authenticateToken = require("../../middlewares/authAdminMiddleware");
+
 Routes.post("/", authenticateToken, userController.createUser);
 Routes.get("/", authenticateToken, userController.getAllUsers);
 Routes.get("/:id", authenticateToken, userController.getOneUser);
