@@ -1,19 +1,28 @@
 const express = require("express");
 const router = express.Router();
 const authController = require("../controllers/auth.controller");
-const authClients = require("./../controllers/authClients.controller");
-const authenticateAdminToken = require("../middlewares/authAdminMiddleware");
+const authClientsController = require("../controllers/authClients.controller");
 const authenticateToken = require("../middlewares/authMiddleware");
 
-// Registro
+// --- RUTAS PÚBLICAS ---
 router.post("/register", authController.register);
-
-// Admin Login
 router.post("/admin/login", authController.login);
-router.post("/admin/refreshToken", authenticateAdminToken);
+router.post("/login", authClientsController.login);
 
-// Client Login
-router.post("/login", authClients.login);
-router.post("/refreshToken", authenticateToken);
+// --- RUTAS PROTEGIDAS ---
+
+// CAMBIO DE CONTRASEÑA PARA EMPLEADOS/ADMINS
+router.put(
+  "/employees/change-password",
+  authenticateToken,
+  authController.changePassword
+);
+
+// CAMBIO DE CONTRASEÑA PARA CLIENTES
+router.put(
+  "/clients/change-password",
+  authenticateToken,
+  authClientsController.changePassword
+);
 
 module.exports = router;

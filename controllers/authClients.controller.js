@@ -1,9 +1,8 @@
 const db = require("../models/index.model");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const Client = db.users; // Usamos el modelo 'users' para clientes
+const Client = db.users;
 
-// Se usa la clave secreta universal del archivo .env
 const JWT_SECRET = process.env.JWT_SECRET;
 
 exports.login = async (req, res) => {
@@ -51,12 +50,50 @@ exports.login = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en login de cliente:", error);
+    res.status(500).json({
+      ok: false,
+      msg: "Error al iniciar sesión",
+      error: error.message,
+    });
+  }
+};
+
+exports.changePassword = async (req, res) => {
+  const userId = req.user.id;
+  const { currentPassword, newPassword } = req.body;
+
+  try {
+    if (!currentPassword || !newPassword) {
+      return res
+        .status(400)
+        .json({ ok: false, msg: "Todos los campos son requeridos." });
+    }
+
+    // CAMBIO AQUÍ: Usa 'Employee' en lugar de 'User'
+    const user = await Client.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ ok: false, msg: "Usuario no encontrado." });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res
+        .status(401)
+        .json({ ok: false, msg: "La contraseña actual es incorrecta." });
+    }
+
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedNewPassword;
+    await user.save();
+
     res
-      .status(500)
-      .json({
-        ok: false,
-        msg: "Error al iniciar sesión",
-        error: error.message,
-      });
+      .status(200)
+      .json({ ok: true, msg: "Contraseña actualizada exitosamente." });
+  } catch (error) {
+    console.error("Error al cambiar la contraseña:", error);
+    res.status(500).json({
+      ok: false,
+      msg: "Error en el servidor al cambiar la contraseña.",
+    });
   }
 };

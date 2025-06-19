@@ -1,14 +1,12 @@
-// controllers/auth.controller.js
-
 const db = require("../models/index.model");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const Employee = db.employees;
 const UserType = db.userTypes;
 
-const JWT_SECRET = process.env.JWT_SECRET; // Usar la clave universal
+const JWT_SECRET = process.env.JWT_SECRET;
 
-// Registro (sin cambios funcionales)
+// Registro
 exports.register = async (req, res) => {
   const {
     name,
@@ -47,7 +45,7 @@ exports.register = async (req, res) => {
   }
 };
 
-// Login (CORREGIDO para incluir siempre el rol)
+// Login
 exports.login = async (req, res) => {
   const { userName, password } = req.body;
 
@@ -57,8 +55,8 @@ exports.login = async (req, res) => {
       include: [
         {
           model: UserType,
-          as: "userType", // Alias de la asociación
-          attributes: ["name"], // Traemos el nombre del rol
+          as: "userType",
+          attributes: ["name"],
         },
       ],
     });
@@ -78,8 +76,7 @@ exports.login = async (req, res) => {
         .json({ ok: false, msg: "Error de configuración: Rol no asignado." });
     }
 
-    // --- LÓGICA DE MAPEO DE ROLES (TRADUCCIÓN) ---
-    const roleFromDB = employee.userType.name; // ej: "Super Usuario"
+    const roleFromDB = employee.userType.name;
     let standardizedRole;
 
     switch (roleFromDB) {
@@ -93,15 +90,12 @@ exports.login = async (req, res) => {
         standardizedRole = "employee";
         break;
       default:
-        // Si hay un rol desconocido, asignamos uno por defecto y lo advertimos
         console.warn(
           `Rol desconocido en la base de datos: "${roleFromDB}". Asignando 'employee'.`
         );
         standardizedRole = "employee";
     }
-    // ---------------------------------------------
 
-    // A partir de aquí, usamos 'standardizedRole' para todo
     const token = jwt.sign(
       {
         id: employee.id,
@@ -121,7 +115,7 @@ exports.login = async (req, res) => {
       userName: employee.userName,
       phone: employee.phone,
       photo: employee.photo,
-      role: standardizedRole, // Se envía el rol estandarizado al front-end
+      role: standardizedRole,
     };
 
     res.status(200).json({
@@ -132,12 +126,50 @@ exports.login = async (req, res) => {
     });
   } catch (error) {
     console.error("Error detallado en login de admin:", error);
+    res.status(500).json({
+      ok: false,
+      msg: "Error interno del servidor",
+      error: error.message,
+    });
+  }
+};
+
+exports.changePassword = async (req, res) => {
+  const userId = req.user.id;
+  const { currentPassword, newPassword } = req.body;
+
+  try {
+    if (!currentPassword || !newPassword) {
+      return res
+        .status(400)
+        .json({ ok: false, msg: "Todos los campos son requeridos." });
+    }
+
+    // CAMBIO AQUÍ: Usa 'Employee' en lugar de 'User'
+    const user = await Employee.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ ok: false, msg: "Usuario no encontrado." });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res
+        .status(401)
+        .json({ ok: false, msg: "La contraseña actual es incorrecta." });
+    }
+
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedNewPassword;
+    await user.save();
+
     res
-      .status(500)
-      .json({
-        ok: false,
-        msg: "Error interno del servidor",
-        error: error.message,
-      });
+      .status(200)
+      .json({ ok: true, msg: "Contraseña actualizada exitosamente." });
+  } catch (error) {
+    console.error("Error al cambiar la contraseña:", error);
+    res.status(500).json({
+      ok: false,
+      msg: "Error en el servidor al cambiar la contraseña.",
+    });
   }
 };
