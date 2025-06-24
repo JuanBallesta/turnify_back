@@ -102,6 +102,7 @@ exports.login = async (req, res) => {
         userName: employee.userName,
         email: employee.email,
         role: standardizedRole,
+        businessId: employee.businessId,
       },
       JWT_SECRET,
       { expiresIn: "8h" }
@@ -116,6 +117,7 @@ exports.login = async (req, res) => {
       phone: employee.phone,
       photo: employee.photo,
       role: standardizedRole,
+      businessId: employee.businessId,
     };
 
     res.status(200).json({

@@ -34,6 +34,11 @@ module.exports = (sequelize, Sequelize) => {
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
   });
 
   return employees;
