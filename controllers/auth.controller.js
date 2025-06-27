@@ -6,40 +6,79 @@ const UserType = db.userTypes;
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-// Registro
 exports.register = async (req, res) => {
   const {
     name,
     lastName,
-    userName,
+    username,
     password,
     email,
     phone,
     businessId,
     userTypeId,
+    isActive,
   } = req.body;
+
   try {
+    const existingEmployee = await Employee.findOne({
+      where: {
+        [db.Sequelize.Op.or]: [{ email: email }, { username: username }],
+      },
+    });
+
+    if (existingEmployee) {
+      if (existingEmployee.email === email) {
+        return res.status(409).json({
+          ok: false,
+          msg: "Conflicto de datos.",
+          errors: [
+            {
+              path: "email", // El campo que causó el error
+              msg: "Este correo electrónico ya está en uso.",
+            },
+          ],
+        });
+      }
+
+      if (existingEmployee.username === username) {
+        return res.status(409).json({
+          ok: false,
+          msg: "Conflicto de datos.",
+          errors: [
+            {
+              path: "username", // El campo que causó el error
+              msg: "Este nombre de usuario ya está registrado. Por favor, elige otro.",
+            },
+          ],
+        });
+      }
+    }
+
+    // Hasheamos la contraseña antes de guardarla
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Creamos el nuevo empleado en la base de datos
     const newEmployee = await Employee.create({
       name,
       lastName,
-      userName,
+      username,
       password: hashedPassword,
       email,
       phone,
       businessId,
       userTypeId,
+      isActive: isActive ?? true,
     });
     res.status(201).json({
       ok: true,
-      msg: "Empleado registrado correctamente",
+      msg: "Empleado registrado correctamente.",
       data: newEmployee,
     });
   } catch (error) {
-    console.error("Error al registrar empleado:", error);
+    console.error("Error inesperado al registrar empleado:", error);
     res.status(500).json({
       ok: false,
-      msg: "Error al registrar usuario",
+      msg: "Error interno del servidor al intentar registrar el usuario.",
       error: error.message,
     });
   }

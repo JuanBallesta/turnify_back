@@ -51,10 +51,8 @@ exports.createEmployee = async (req, res) => {
 
 // Obtener todos los empleados con su negocio y rol asociados
 exports.getAllEmployees = (req, res) => {
-  // Extraemos el businessId del query de la URL
   const { businessId } = req.query;
 
-  // Construimos la condición de búsqueda
   const whereCondition = {};
   if (businessId) {
     whereCondition.businessId = businessId;
@@ -62,12 +60,11 @@ exports.getAllEmployees = (req, res) => {
 
   employee
     .findAll({
-      where: whereCondition, // Aplicamos la condición aquí
+      where: whereCondition,
       include: [
         { model: business, as: "business", attributes: ["id", "name"] },
         { model: userTypes, as: "userType", attributes: ["id", "name"] },
       ],
-      // Opcional: ordenar por defecto
       order: [["name", "ASC"]],
     })
     .then((employees) => {
@@ -79,7 +76,12 @@ exports.getAllEmployees = (req, res) => {
       });
     })
     .catch((error) => {
-      // ... manejo de errores
+      res.status(500).json({
+        ok: false,
+        msg: "Error al obtener los empleados.",
+        status: 500,
+        data: error.message || error,
+      });
     });
 };
 
@@ -130,7 +132,7 @@ exports.getOneEmployee = (req, res) => {
 // Actualizar un empleado
 exports.updateEmployee = async (req, res) => {
   const employeeIdToUpdate = req.params.id;
-  const authenticatedUser = req.user; // Usuario que hace la petición (viene del token)
+  const authenticatedUser = req.user;
 
   try {
     const employeeToUpdate = await employee.findByPk(employeeIdToUpdate);
@@ -140,68 +142,35 @@ exports.updateEmployee = async (req, res) => {
         .json({ ok: false, msg: "Empleado no encontrado." });
     }
 
-    // --- LÓGICA DE PERMISOS CORREGIDA Y ROBUSTA ---
-    if (authenticatedUser.role === "administrator") {
-      // Convertimos ambos IDs a número para una comparación segura.
-      // Number(null) es 0, por lo que la comprobación también maneja valores nulos.
-      const adminBusinessId = Number(authenticatedUser.businessId);
-      const employeeBusinessId = Number(employeeToUpdate.businessId);
-
-      // Añadimos un console.log para depuración en el servidor
-      console.log(
-        `Verificando permisos: Admin Business ID: ${adminBusinessId}, Empleado Business ID: ${employeeBusinessId}`
-      );
-
-      // Si alguno de los IDs no es válido o si no coinciden, denegar.
-      if (
-        !adminBusinessId ||
-        !employeeBusinessId ||
-        adminBusinessId !== employeeBusinessId
-      ) {
-        return res.status(403).json({
-          ok: false,
-          msg: "No tienes permiso para editar empleados de otro negocio.",
-        });
-      }
-    }
-    // (Un superuser puede editar a cualquiera, por lo que no necesita esta comprobación)
-
-    const { businessId, userTypeId, isActive } = req.body;
-    const updatedFields = {};
-
-    if (businessId !== undefined) updatedFields.businessId = businessId;
-    if (userTypeId !== undefined) updatedFields.userTypeId = userTypeId;
-    if (isActive !== undefined) updatedFields.isActive = isActive;
-
-    // Un administrador no puede cambiar a un empleado de negocio.
-    if (updatedFields.businessId && authenticatedUser.role !== "superuser") {
-      // En lugar de dar error, simplemente ignoramos este campo si no es superuser.
-      delete updatedFields.businessId;
+    // Lógica de permisos: solo superuser o el propio usuario pueden editar.
+    if (
+      authenticatedUser.role !== "superuser" &&
+      parseInt(authenticatedUser.id) !== parseInt(employeeIdToUpdate)
+    ) {
+      return res.status(403).json({ ok: false, msg: "Acceso denegado." });
     }
 
-    if (Object.keys(updatedFields).length === 0) {
-      return res.status(400).json({
-        ok: false,
-        msg: "No se proporcionaron datos para actualizar.",
-      });
+    const dataToUpdate = req.body;
+
+    if (authenticatedUser.role !== "superuser") {
+      delete dataToUpdate.businessId;
+      delete dataToUpdate.userTypeId;
+      delete dataToUpdate.isActive;
     }
 
-    await employeeToUpdate.update(updatedFields);
+    await employeeToUpdate.update(dataToUpdate);
 
-    const updatedEmployeeWithDetails = await employee.findByPk(
-      employeeIdToUpdate,
-      {
-        include: [
-          { model: userTypes, as: "userType", attributes: ["name"] },
-          { model: business, as: "business", attributes: ["name"] },
-        ],
-      }
-    );
+    const updatedEmployee = await employee.findByPk(employeeIdToUpdate, {
+      include: [
+        { model: userTypes, as: "userType", attributes: ["name"] },
+        { model: business, as: "business", attributes: ["name"] },
+      ],
+    });
 
     res.status(200).json({
       ok: true,
       msg: "Empleado actualizado correctamente.",
-      data: updatedEmployeeWithDetails,
+      user: updatedEmployee,
     });
   } catch (error) {
     console.error("Error al actualizar el empleado:", error);

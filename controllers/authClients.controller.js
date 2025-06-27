@@ -5,6 +5,65 @@ const Client = db.users;
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
+exports.register = async (req, res) => {
+  const { name, lastName, userName, password, email, phone } = req.body;
+
+  try {
+    const existingClient = await Client.findOne({
+      where: {
+        [db.Sequelize.Op.or]: [{ email: email }, { userName: userName }],
+      },
+    });
+
+    if (existingClient) {
+      if (existingClient.email === email) {
+        return res.status(409).json({
+          ok: false,
+          msg: "Conflicto de datos.",
+          errors: [
+            { path: "email", msg: "Este correo electrónico ya está en uso." },
+          ],
+        });
+      }
+      if (existingClient.userName === userName) {
+        return res.status(409).json({
+          ok: false,
+          msg: "Conflicto de datos.",
+          errors: [
+            {
+              path: "userName",
+              msg: "Este nombre de usuario ya está registrado.",
+            },
+          ],
+        });
+      }
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newClient = await Client.create({
+      name,
+      lastName,
+      userName,
+      password: hashedPassword,
+      email,
+      phone,
+    });
+
+    res.status(201).json({
+      ok: true,
+      msg: "Cliente registrado correctamente.",
+      data: newClient,
+    });
+  } catch (error) {
+    console.error("Error inesperado al registrar cliente:", error);
+    res.status(500).json({
+      ok: false,
+      msg: "Error interno del servidor al registrar el cliente.",
+      error: error.message,
+    });
+  }
+};
+
 exports.login = async (req, res) => {
   const { userName, password } = req.body;
 
@@ -20,13 +79,12 @@ exports.login = async (req, res) => {
       return res.status(401).json({ ok: false, msg: "Contraseña incorrecta" });
     }
 
-    // Generar token JWT con la clave universal, incluyendo el rol 'client'
     const token = jwt.sign(
       {
         id: client.id,
         userName: client.userName,
         email: client.email,
-        role: "client", // Añadimos el rol manualmente
+        role: "client",
       },
       JWT_SECRET,
       { expiresIn: "2h" }
@@ -45,7 +103,7 @@ exports.login = async (req, res) => {
         phone: client.phone,
         notes: client.notes,
         photo: client.photo,
-        role: "client", // También lo añadimos a la respuesta
+        role: "client",
       },
     });
   } catch (error) {
@@ -69,13 +127,12 @@ exports.changePassword = async (req, res) => {
         .json({ ok: false, msg: "Todos los campos son requeridos." });
     }
 
-    // CAMBIO AQUÍ: Usa 'Employee' en lugar de 'User'
-    const user = await Client.findByPk(userId);
-    if (!user) {
+    const client = await Client.findByPk(userId);
+    if (!client) {
       return res.status(404).json({ ok: false, msg: "Usuario no encontrado." });
     }
 
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    const isMatch = await bcrypt.compare(currentPassword, client.password);
     if (!isMatch) {
       return res
         .status(401)
@@ -83,8 +140,8 @@ exports.changePassword = async (req, res) => {
     }
 
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedNewPassword;
-    await user.save();
+    client.password = hashedNewPassword;
+    await client.save();
 
     res
       .status(200)
