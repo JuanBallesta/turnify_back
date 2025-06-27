@@ -142,43 +142,97 @@ exports.updateEmployee = async (req, res) => {
         .json({ ok: false, msg: "Empleado no encontrado." });
     }
 
-    // Lógica de permisos: solo superuser o el propio usuario pueden editar.
-    if (
-      authenticatedUser.role !== "superuser" &&
-      parseInt(authenticatedUser.id) !== parseInt(employeeIdToUpdate)
-    ) {
+    // Lógica de permisos (ya está correcta y es robusta)
+    const isAdmin = authenticatedUser.role === "administrator";
+    const isSuperUser = authenticatedUser.role === "superuser";
+    const isSelf =
+      parseInt(authenticatedUser.id) === parseInt(employeeIdToUpdate);
+    let hasPermission = isSelf || isSuperUser;
+    if (isAdmin && !isSelf) {
+      const adminBusinessId = Number(authenticatedUser.businessId);
+      const employeeBusinessId = Number(employeeToUpdate.businessId);
+      if (
+        adminBusinessId &&
+        employeeBusinessId &&
+        adminBusinessId === employeeBusinessId
+      ) {
+        hasPermission = true;
+      }
+    }
+    if (!hasPermission) {
       return res.status(403).json({ ok: false, msg: "Acceso denegado." });
     }
 
-    const dataToUpdate = req.body;
+    // --- LÓGICA DE ACTUALIZACIÓN FLEXIBLE (LA SOLUCIÓN) ---
+    // Leemos TODOS los posibles campos del body
+    const { name, lastName, phone, notes, businessId, userTypeId, isActive } =
+      req.body;
+    const updatedFields = {};
 
-    if (authenticatedUser.role !== "superuser") {
-      delete dataToUpdate.businessId;
-      delete dataToUpdate.userTypeId;
-      delete dataToUpdate.isActive;
+    // Comprobamos cada campo y lo añadimos si fue proporcionado en la petición
+    if (name !== undefined) updatedFields.name = name;
+    if (lastName !== undefined) updatedFields.lastName = lastName;
+    if (phone !== undefined) updatedFields.phone = phone;
+    if (notes !== undefined) updatedFields.notes = notes;
+    if (businessId !== undefined) updatedFields.businessId = businessId;
+    if (userTypeId !== undefined) updatedFields.userTypeId = userTypeId;
+    if (isActive !== undefined) updatedFields.isActive = isActive;
+
+    // Reglas de negocio sobre los campos a actualizar
+    if (updatedFields.businessId && !isSuperUser) {
+      delete updatedFields.businessId;
+    }
+    if (updatedFields.userTypeId) {
+      const targetRole = await userTypes.findByPk(updatedFields.userTypeId);
+      if (
+        targetRole &&
+        targetRole.name.toLowerCase() === "super usuario" &&
+        !isSuperUser
+      ) {
+        return res
+          .status(403)
+          .json({
+            ok: false,
+            msg: "No tienes permiso para asignar el rol de Super Usuario.",
+          });
+      }
     }
 
-    await employeeToUpdate.update(dataToUpdate);
+    if (Object.keys(updatedFields).length === 0) {
+      return res
+        .status(400)
+        .json({
+          ok: false,
+          msg: "No se proporcionaron datos para actualizar.",
+        });
+    }
 
-    const updatedEmployee = await employee.findByPk(employeeIdToUpdate, {
-      include: [
-        { model: userTypes, as: "userType", attributes: ["name"] },
-        { model: business, as: "business", attributes: ["name"] },
-      ],
-    });
+    await employeeToUpdate.update(updatedFields);
+
+    const updatedEmployeeWithDetails = await employee.findByPk(
+      employeeIdToUpdate,
+      {
+        include: [
+          { model: userTypes, as: "userType" },
+          { model: business, as: "business" },
+        ],
+      }
+    );
 
     res.status(200).json({
       ok: true,
       msg: "Empleado actualizado correctamente.",
-      user: updatedEmployee,
+      user: updatedEmployeeWithDetails, // Devolvemos en 'user' para consistencia
     });
   } catch (error) {
     console.error("Error al actualizar el empleado:", error);
-    res.status(500).json({
-      ok: false,
-      msg: "Error al actualizar el empleado.",
-      error: error.message,
-    });
+    res
+      .status(500)
+      .json({
+        ok: false,
+        msg: "Error al actualizar el empleado.",
+        error: error.message,
+      });
   }
 };
 
