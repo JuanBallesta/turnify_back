@@ -22,7 +22,10 @@ module.exports = (app) => {
 
   const userRoutes = require("./users/users.routes");
   app.use("/users", userRoutes);
-  // Rutas de admin
+
   const userAdminRoutes = require("./employees/users.routes");
   app.use("/admin/users", userAdminRoutes);
+
+  const scheduleRoutes = require("./schedules.routes");
+  app.use("/schedules", scheduleRoutes);
 };

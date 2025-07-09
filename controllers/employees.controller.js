@@ -10,7 +10,7 @@ exports.createEmployee = async (req, res) => {
   const {
     name,
     lastName,
-    username,
+    userName,
     password,
     email,
     phone,
@@ -25,7 +25,7 @@ exports.createEmployee = async (req, res) => {
     const newEmployee = await employee.create({
       name,
       lastName,
-      username,
+      userName,
       password: hashedPassword,
       email,
       phone,
@@ -189,22 +189,18 @@ exports.updateEmployee = async (req, res) => {
         targetRole.name.toLowerCase() === "super usuario" &&
         !isSuperUser
       ) {
-        return res
-          .status(403)
-          .json({
-            ok: false,
-            msg: "No tienes permiso para asignar el rol de Super Usuario.",
-          });
+        return res.status(403).json({
+          ok: false,
+          msg: "No tienes permiso para asignar el rol de Super Usuario.",
+        });
       }
     }
 
     if (Object.keys(updatedFields).length === 0) {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          msg: "No se proporcionaron datos para actualizar.",
-        });
+      return res.status(400).json({
+        ok: false,
+        msg: "No se proporcionaron datos para actualizar.",
+      });
     }
 
     await employeeToUpdate.update(updatedFields);
@@ -226,13 +222,11 @@ exports.updateEmployee = async (req, res) => {
     });
   } catch (error) {
     console.error("Error al actualizar el empleado:", error);
-    res
-      .status(500)
-      .json({
-        ok: false,
-        msg: "Error al actualizar el empleado.",
-        error: error.message,
-      });
+    res.status(500).json({
+      ok: false,
+      msg: "Error al actualizar el empleado.",
+      error: error.message,
+    });
   }
 };
 

@@ -33,28 +33,56 @@ exports.createBusiness = (req, res) => {
 };
 
 // Obtener todos los negocios.
-exports.getAllBusinesses = (req, res) => {
-  business
-    .findAll()
-    .then((business) => {
-      res.status(200).json({
-        ok: true,
-        msg: "Lista de negocios.",
-        status: 200,
-        data: business,
-      });
-    })
-    .catch((error) => {
-      res.status(500).json({
-        ok: false,
-        msg: "Error al obtener los negocios.",
-        status: 500,
-        data: error,
-      });
+exports.getAllBusinesses = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 6;
+    const offset = (page - 1) * limit;
+
+    const { count, rows } = await business.findAndCountAll({
+      limit: limit,
+      offset: offset,
+      order: [["name", "ASC"]],
     });
+
+    res.status(200).json({
+      ok: true,
+      msg: "Lista de negocios paginada.",
+      data: {
+        totalItems: count,
+        totalPages: Math.ceil(count / limit),
+        currentPage: page,
+        businesses: rows,
+      },
+    });
+  } catch (error) {
+    console.error("Error al obtener los negocios:", error);
+    res.status(500).json({
+      ok: false,
+      msg: "Error interno del servidor.",
+      error: error.message,
+    });
+  }
 };
 
-// Obtener un usuario.
+exports.getAllBusinessesForSelect = async (req, res) => {
+  try {
+    const businesses = await business.findAll({
+      attributes: ["id", "name"],
+      order: [["name", "ASC"]],
+    });
+    res.status(200).json({
+      ok: true,
+      msg: "Lista completa de negocios.",
+      data: businesses,
+    });
+  } catch (error) {
+    console.error("Error en getAllBusinessesForSelect:", error);
+    res.status(500).json({ ok: false, msg: "Error interno del servidor." });
+  }
+};
+
+// Obtener un negocio.
 exports.getOneBusiness = (req, res) => {
   const id = req.params.id;
   business

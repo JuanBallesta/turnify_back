@@ -3,6 +3,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const Employee = db.employees;
 const UserType = db.userTypes;
+const Business = db.businesses;
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -10,7 +11,7 @@ exports.register = async (req, res) => {
   const {
     name,
     lastName,
-    username,
+    userName,
     password,
     email,
     phone,
@@ -22,7 +23,7 @@ exports.register = async (req, res) => {
   try {
     const existingEmployee = await Employee.findOne({
       where: {
-        [db.Sequelize.Op.or]: [{ email: email }, { username: username }],
+        [db.Sequelize.Op.or]: [{ email: email }, { userName: userName }],
       },
     });
 
@@ -40,13 +41,13 @@ exports.register = async (req, res) => {
         });
       }
 
-      if (existingEmployee.username === username) {
+      if (existingEmployee.userName === userName) {
         return res.status(409).json({
           ok: false,
           msg: "Conflicto de datos.",
           errors: [
             {
-              path: "username", // El campo que causó el error
+              path: "userName", // El campo que causó el error
               msg: "Este nombre de usuario ya está registrado. Por favor, elige otro.",
             },
           ],
@@ -61,7 +62,7 @@ exports.register = async (req, res) => {
     const newEmployee = await Employee.create({
       name,
       lastName,
-      username,
+      userName,
       password: hashedPassword,
       email,
       phone,
@@ -95,6 +96,11 @@ exports.login = async (req, res) => {
         {
           model: UserType,
           as: "userType",
+          attributes: ["name"],
+        },
+        {
+          model: Business,
+          as: "business",
           attributes: ["name"],
         },
       ],
@@ -142,6 +148,7 @@ exports.login = async (req, res) => {
         email: employee.email,
         role: standardizedRole,
         businessId: employee.businessId,
+        businessName: employee.business?.name,
       },
       JWT_SECRET,
       { expiresIn: "8h" }
@@ -157,6 +164,7 @@ exports.login = async (req, res) => {
       photo: employee.photo,
       role: standardizedRole,
       businessId: employee.businessId,
+      businessName: employee.business?.name,
     };
 
     res.status(200).json({

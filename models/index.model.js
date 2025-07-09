@@ -26,6 +26,11 @@ db.offerings = require("./offering.model")(sequelize, Sequelize);
 db.extraFields = require("./extraFields.model")(sequelize, Sequelize);
 db.appointments = require("./appointments.model")(sequelize, Sequelize);
 db.users = require("./users.model")(sequelize, Sequelize);
+db.employeeOffering = require("./employeeOfferings.model")(
+  sequelize,
+  Sequelize
+);
+db.Schedule = require("./schedule.model")(sequelize, Sequelize);
 
 // Relaciones entre modelos
 
@@ -50,6 +55,29 @@ db.employees.belongsTo(db.businesses);
 // Un negocio tiene muchos servicios
 db.businesses.hasMany(db.offerings);
 db.offerings.belongsTo(db.businesses);
+
+// Un empleado tiene muchos servicios
+db.employees.belongsToMany(db.offerings, {
+  through: db.employeeOffering,
+  foreignKey: "employeeId",
+  as: "services",
+});
+
+db.offerings.belongsToMany(db.employees, {
+  through: db.employeeOffering,
+  foreignKey: "offeringId",
+  as: "employees",
+});
+
+// Relación Empleados-Horarios
+db.employees.hasMany(db.Schedule, {
+  foreignKey: "employeeId",
+  as: "schedules",
+});
+db.Schedule.belongsTo(db.employees, {
+  foreignKey: "employeeId",
+  as: "employee",
+});
 
 // Un servicio puede tener muchos extraFields (campos extra)
 db.offerings.hasMany(db.extraFields);
