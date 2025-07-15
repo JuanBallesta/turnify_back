@@ -1,19 +1,26 @@
 const db = require("../models/index.model");
-const Schedule = db.Schedule;
-const Employee = db.employees;
+const schedule = db.schedule;
+const employee = db.employees;
+
+if (!schedule || !employee) {
+  console.error(
+    "ERROR CRÍTICO: Los modelos Schedule o Employee no se cargaron correctamente."
+  );
+  // En un entorno real, esto podría detener la aplicación.
+}
 
 // Obtener los horarios de un empleado específico
 exports.getSchedulesByEmployee = async (req, res) => {
   const { employeeId } = req.params;
   try {
-    const employee = await Employee.findByPk(employeeId);
+    const foundEmployee = await employee.findByPk(employeeId);
     if (!employee) {
       return res
         .status(404)
         .json({ ok: false, msg: "Empleado no encontrado." });
     }
 
-    const schedules = await Schedule.findAll({
+    const schedules = await schedule.findAll({
       where: { employeeId: employeeId },
       order: [
         ["dayOfWeek", "ASC"],
@@ -55,14 +62,14 @@ exports.updateSchedulesForEmployee = async (req, res) => {
 
   const t = await db.sequelize.transaction();
   try {
-    await Schedule.destroy({ where: { employeeId }, transaction: t });
+    await schedule.destroy({ where: { employeeId }, transaction: t });
 
     if (newSchedules.length > 0) {
       const schedulesToCreate = newSchedules.map((schedule) => ({
         ...schedule,
         employeeId: employeeId,
       }));
-      await Schedule.bulkCreate(schedulesToCreate, { transaction: t });
+      await schedule.bulkCreate(schedulesToCreate, { transaction: t });
     }
 
     await t.commit();

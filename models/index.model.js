@@ -1,15 +1,18 @@
 const Sequelize = require("sequelize");
 const config = require("../config/index.config");
 
+const options = {
+  host: config.db.host,
+  dialect: config.db.dialect,
+  port: config.db.port,
+  timezone: "-03:00",
+};
+
 const sequelize = new Sequelize(
   config.db.schema,
   config.db.user,
   config.db.password,
-  {
-    host: config.db.host,
-    dialect: config.db.dialect,
-    port: config.db.port,
-  }
+  options
 );
 
 const db = {};
@@ -30,7 +33,7 @@ db.employeeOffering = require("./employeeOfferings.model")(
   sequelize,
   Sequelize
 );
-db.Schedule = require("./schedule.model")(sequelize, Sequelize);
+db.schedule = require("./schedule.model")(sequelize, Sequelize);
 
 // Relaciones entre modelos
 
@@ -70,11 +73,11 @@ db.offerings.belongsToMany(db.employees, {
 });
 
 // Relación Empleados-Horarios
-db.employees.hasMany(db.Schedule, {
+db.employees.hasMany(db.schedule, {
   foreignKey: "employeeId",
   as: "schedules",
 });
-db.Schedule.belongsTo(db.employees, {
+db.schedule.belongsTo(db.employees, {
   foreignKey: "employeeId",
   as: "employee",
 });
@@ -90,5 +93,8 @@ db.appointments.belongsTo(db.employees);
 // Un servicio puede tener muchas reservas
 db.offerings.hasMany(db.appointments);
 db.appointments.belongsTo(db.offerings);
+
+db.users.hasMany(db.appointments, { foreignKey: "userId" });
+db.appointments.belongsTo(db.users, { foreignKey: "userId", as: "client" });
 
 module.exports = db;

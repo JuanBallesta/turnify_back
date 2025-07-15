@@ -1,33 +1,39 @@
 const db = require("../models/index.model");
 const appointment = db.appointments;
+const employee = db.employees;
+const offering = db.offerings;
+const user = db.users;
 
 // Crear una nueva cita
-exports.createAppointment = (req, res) => {
-  const { startTime, endTime, status, notes } = req.body;
+exports.createAppointment = async (req, res) => {
+  const userIdFromToken = req.user.id;
+  const { employeeId, offeringId, startTime, endTime, status, notes } =
+    req.body;
 
-  appointment
-    .create({
+  if (!employeeId || !offeringId || !startTime || !endTime) {
+    return res.status(400).json({ ok: false, msg: "Faltan datos requeridos." });
+  }
+
+  try {
+    const newAppointment = await appointment.create({
+      userId: userIdFromToken,
+      employeeId,
+      offeringId,
       startTime,
       endTime,
-      status,
+      status: status || "scheduled",
       notes,
-    })
-    .then((newAppointment) => {
-      res.status(201).json({
-        ok: true,
-        msg: "Cita creada.",
-        status: 201,
-        data: newAppointment,
-      });
-    })
-    .catch((error) => {
-      res.status(500).json({
-        ok: false,
-        msg: "Error al crear la cita.",
-        status: 500,
-        data: error,
-      });
     });
+
+    res.status(201).json({
+      ok: true,
+      msg: "Cita creada exitosamente.",
+      data: newAppointment,
+    });
+  } catch (error) {
+    console.error("<<<<< ERROR FATAL AL CREAR CITA >>>>>", error);
+    res.status(500).json({ ok: false, msg: "Error interno al crear la cita." });
+  }
 };
 
 // Obtener todas las citas
@@ -81,6 +87,45 @@ exports.getOneAppointment = (req, res) => {
         data: error,
       });
     });
+};
+
+exports.getMyAppointments = async (req, res) => {
+  const { id, role, businessId } = req.user;
+  const whereCondition = {};
+
+  try {
+    if (role === "userId") {
+      whereCondition.clientId = id;
+    } else if (role === "employee") {
+      whereCondition.employeeId = id;
+    } else if (role === "administrator") {
+      const employeesInBusiness = await employee.findAll({
+        where: { businessId: businessId },
+        attributes: ["id"],
+      });
+      const employeeIds = employeesInBusiness.map((e) => e.id);
+      whereCondition.employeeId = { [db.Sequelize.Op.in]: employeeIds };
+    }
+
+    const appointments = await appointment.findAll({
+      where: whereCondition,
+      include: [
+        {
+          model: offering,
+          as: "offering",
+          attributes: ["name", "description"],
+        },
+        { model: employee, as: "employee", attributes: ["name", "lastName"] },
+        { model: user, as: "client", attributes: ["name", "lastName"] },
+      ],
+      order: [["startTime", "DESC"]],
+    });
+
+    res.status(200).json({ ok: true, data: appointments });
+  } catch (error) {
+    console.error("Error en getMy-appointments:", error);
+    res.status(500).json({ ok: false, msg: "Error al obtener las citas." });
+  }
 };
 
 // Actualizar una cita

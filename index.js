@@ -10,7 +10,7 @@ app.use(
     credentials: true,
   })
 );
-
+app.use(express.static("public"));
 const port = 3000;
 
 app.use(express.json());

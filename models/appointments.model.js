@@ -1,3 +1,4 @@
+"use strict";
 module.exports = (sequelize, DataTypes) => {
   const appointment = sequelize.define("appointments", {
     startTime: {
@@ -11,13 +12,40 @@ module.exports = (sequelize, DataTypes) => {
     status: {
       type: DataTypes.STRING,
       allowNull: false,
-      defaultValue: "pending",
+      defaultValue: "scheduled",
     },
     notes: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT,
       allowNull: true,
     },
+    employeeId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    offeringId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    userId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
   });
+
+  appointment.associate = function (models) {
+    appointment.belongsTo(models.Employee, {
+      foreignKey: "employeeId",
+      as: "employee",
+    });
+    appointment.belongsTo(models.Offering, {
+      foreignKey: "offeringId",
+      as: "offering",
+    });
+    appointment.belongsTo(models.User, {
+      foreignKey: "userId",
+      as: "userId",
+    });
+  };
 
   return appointment;
 };

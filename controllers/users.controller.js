@@ -186,3 +186,60 @@ exports.deleteUser = async (req, res) => {
     });
   }
 };
+
+exports.uploadProfilePhoto = async (req, res) => {
+  // LOG 1: ¿Llega la petición al controlador?
+  console.log("--- Petición para subir foto recibida ---");
+
+  // LOG 2: ¿Multer procesó el archivo?
+  // Si 'req.file' es undefined, multer falló o no se configuró en la ruta.
+  console.log("Objeto req.file:", req.file);
+  console.log("Objeto req.user (del token):", req.user);
+  console.log("Parámetros de la ruta (req.params):", req.params);
+
+  const userId = req.params.id;
+
+  if (!req.file) {
+    console.error(
+      "ERROR: No se encontró req.file. Multer no procesó el archivo."
+    );
+    return res
+      .status(400)
+      .json({ ok: false, msg: "No se ha subido ningún archivo." });
+  }
+
+  try {
+    // Asumo que tienes modelos separados User y Employee
+    const modelToUpdate = req.user.role === "client" ? db.User : db.Employee;
+
+    console.log(
+      `Buscando usuario con ID: ${userId} en el modelo ${modelToUpdate.name}`
+    );
+    const userToUpdate = await modelToUpdate.findByPk(userId);
+
+    if (!userToUpdate) {
+      console.error(`ERROR: Usuario no encontrado con ID ${userId}`);
+      return res.status(404).json({ ok: false, msg: "Usuario no encontrado." });
+    }
+
+    const photoUrl = `${req.protocol}://${req.get(
+      "host"
+    )}/${req.file.path.replace(/\\/g, "/")}`;
+    console.log("URL de la foto generada:", photoUrl);
+
+    userToUpdate.photo = photoUrl;
+    await userToUpdate.save();
+
+    console.log("¡Foto guardada en la base de datos con éxito!");
+
+    res.status(200).json({
+      ok: true,
+      msg: "Foto de perfil actualizada.",
+      data: { photoUrl },
+    });
+  } catch (error) {
+    // ESTE LOG NOS DIRÁ SI EL ERROR ESTÁ EN LA BASE DE DATOS
+    console.error("<<<<< ERROR FATAL AL GUARDAR LA FOTO EN LA DB >>>>>", error);
+    res.status(500).json({ ok: false, msg: "Error al guardar la foto." });
+  }
+};

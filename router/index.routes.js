@@ -28,4 +28,9 @@ module.exports = (app) => {
 
   const scheduleRoutes = require("./schedules.routes");
   app.use("/schedules", scheduleRoutes);
+
+  const availabilityRoutes = require("./availability.routes");
+  app.use("/availability", availabilityRoutes);
+
+  app.use("/dashboard", require("./dashboard.routes"));
 };
