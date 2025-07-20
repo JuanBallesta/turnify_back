@@ -56,8 +56,15 @@ db.businesses.hasMany(db.employees);
 db.employees.belongsTo(db.businesses);
 
 // Un negocio tiene muchos servicios
-db.businesses.hasMany(db.offerings);
-db.offerings.belongsTo(db.businesses);
+db.businesses.hasMany(db.offerings, {
+  foreignKey: "businessId",
+  as: "offerings",
+});
+// Un servicio pertenece a un negocio
+db.offerings.belongsTo(db.businesses, {
+  foreignKey: "businessId",
+  as: "business",
+});
 
 // Un empleado tiene muchos servicios
 db.employees.belongsToMany(db.offerings, {

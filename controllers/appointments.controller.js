@@ -1,30 +1,35 @@
 const db = require("../models/index.model");
+const { Op } = require("sequelize");
+
+// --- ESTANDARIZACIÓN: Usamos PascalCase para todos los modelos ---
 const appointment = db.appointments;
-const employee = db.employees;
 const offering = db.offerings;
+const employee = db.employees;
 const user = db.users;
+const business = db.businesses;
+
+if (!appointment || !offering || !employee || !user || !business) {
+  console.error(
+    "ERROR CRÍTICO: Uno o más modelos no se cargaron para el appointments.controller."
+  );
+}
 
 // Crear una nueva cita
 exports.createAppointment = async (req, res) => {
-  const userIdFromToken = req.user.id;
-  const { employeeId, offeringId, startTime, endTime, status, notes } =
+  const { employeeId, offeringId, startTime, endTime, notes, status } =
     req.body;
-
-  if (!employeeId || !offeringId || !startTime || !endTime) {
-    return res.status(400).json({ ok: false, msg: "Faltan datos requeridos." });
-  }
+  const userId = req.user.id;
 
   try {
     const newAppointment = await appointment.create({
-      userId: userIdFromToken,
+      userId,
       employeeId,
       offeringId,
       startTime,
       endTime,
-      status: status || "scheduled",
       notes,
+      status: status || "scheduled",
     });
-
     res.status(201).json({
       ok: true,
       msg: "Cita creada exitosamente.",
@@ -32,79 +37,31 @@ exports.createAppointment = async (req, res) => {
     });
   } catch (error) {
     console.error("<<<<< ERROR FATAL AL CREAR CITA >>>>>", error);
-    res.status(500).json({ ok: false, msg: "Error interno al crear la cita." });
+    res.status(500).json({
+      ok: false,
+      msg: "Error al crear la cita.",
+      error: error.message,
+    });
   }
 };
 
-// Obtener todas las citas
-exports.getAllAppointments = (req, res) => {
-  appointment
-    .findAll()
-    .then((appointments) => {
-      res.status(200).json({
-        ok: true,
-        msg: "Lista de citas.",
-        status: 200,
-        data: appointments,
-      });
-    })
-    .catch((error) => {
-      res.status(500).json({
-        ok: false,
-        msg: "Error al obtener las citas.",
-        status: 500,
-        data: error,
-      });
-    });
-};
-
-// Obtener una cita por ID
-exports.getOneAppointment = (req, res) => {
-  const id = req.params.id;
-
-  appointment
-    .findOne({ where: { id } })
-    .then((appointmentData) => {
-      if (!appointmentData) {
-        return res.status(404).json({
-          ok: false,
-          msg: "Cita no encontrada.",
-          status: 404,
-        });
-      }
-      res.status(200).json({
-        ok: true,
-        msg: "Cita encontrada.",
-        status: 200,
-        data: appointmentData,
-      });
-    })
-    .catch((error) => {
-      res.status(500).json({
-        ok: false,
-        msg: "Error al obtener la cita.",
-        status: 500,
-        data: error,
-      });
-    });
-};
-
+// Obtiene las citas relevantes para el usuario logueado
 exports.getMyAppointments = async (req, res) => {
   const { id, role, businessId } = req.user;
-  const whereCondition = {};
 
   try {
-    if (role === "userId") {
-      whereCondition.clientId = id;
-    } else if (role === "employee") {
-      whereCondition.employeeId = id;
-    } else if (role === "administrator") {
-      const employeesInBusiness = await employee.findAll({
-        where: { businessId: businessId },
+    let whereCondition = {};
+    if (role === "client") whereCondition.userId = id;
+    else if (role === "employee") whereCondition.employeeId = id;
+    else if (role === "administrator") {
+      const employeesInBusiness = await Employee.findAll({
+        where: { businessId },
         attributes: ["id"],
       });
       const employeeIds = employeesInBusiness.map((e) => e.id);
-      whereCondition.employeeId = { [db.Sequelize.Op.in]: employeeIds };
+      if (employeeIds.length === 0)
+        return res.status(200).json({ ok: true, data: [] });
+      whereCondition.employeeId = { [Op.in]: employeeIds };
     }
 
     const appointments = await appointment.findAll({
@@ -113,7 +70,13 @@ exports.getMyAppointments = async (req, res) => {
         {
           model: offering,
           as: "offering",
-          attributes: ["name", "description"],
+          include: [
+            {
+              model: business,
+              as: "business",
+              attributes: ["name", "address"],
+            },
+          ],
         },
         { model: employee, as: "employee", attributes: ["name", "lastName"] },
         { model: user, as: "client", attributes: ["name", "lastName"] },
@@ -123,74 +86,56 @@ exports.getMyAppointments = async (req, res) => {
 
     res.status(200).json({ ok: true, data: appointments });
   } catch (error) {
-    console.error("Error en getMy-appointments:", error);
+    console.error("<<<<< ERROR FATAL EN getMyAppointments >>>>>", error);
     res.status(500).json({ ok: false, msg: "Error al obtener las citas." });
   }
 };
 
 // Actualizar una cita
-exports.updateAppointment = (req, res) => {
-  const id = req.params.id;
-  const { startTime, endTime, status, notes } = req.body;
+exports.updateAppointment = async (req, res) => {
+  const appointmentId = req.params.id;
+  const dataToUpdate = req.body; // Esto será { status: 'cancelled' }
 
-  appointment
-    .update(
-      { startTime, endTime, status, notes },
-      { where: { id }, returning: true }
-    )
-    .then(([affectedCount, affectedRows]) => {
-      if (affectedCount === 0) {
-        return res.status(404).json({
-          ok: false,
-          msg: "Cita no encontrada.",
-          status: 404,
-        });
-      }
-      res.status(200).json({
-        ok: true,
-        msg: "Cita actualizada.",
-        status: 200,
-        data: affectedRows[0],
-      });
-    })
-    .catch((error) => {
-      res.status(500).json({
-        ok: false,
-        msg: "Error al actualizar la cita.",
-        status: 500,
-        data: error,
-      });
+  try {
+    // 1. Buscamos la instancia de la cita a actualizar
+    const appointmentToUpdate = await appointment.findByPk(appointmentId);
+    if (!appointmentToUpdate) {
+      return res.status(404).json({ ok: false, msg: "Cita no encontrada." });
+    }
+
+    // 2. Aquí podrías añadir lógica de permisos si es necesario
+    // Ej: if (req.user.id !== appointmentToUpdate.userId && req.user.role !== 'administrator') { ... }
+
+    // 3. Actualizamos la instancia con los nuevos datos
+    await appointmentToUpdate.update(dataToUpdate);
+
+    // 4. Devolvemos la respuesta de éxito
+    res.status(200).json({
+      ok: true,
+      msg: "Cita actualizada correctamente.",
+      data: appointmentToUpdate, // Devolvemos la cita actualizada
     });
+  } catch (error) {
+    console.error("<<<<< ERROR FATAL AL ACTUALIZAR CITA >>>>>", error);
+    res.status(500).json({ ok: false, msg: "Error al actualizar la cita." });
+  }
 };
 
 // Eliminar una cita
-exports.deleteAppointment = (req, res) => {
+exports.deleteAppointment = async (req, res) => {
   const id = req.params.id;
-
-  appointment
-    .destroy({ where: { id } })
-    .then((rowsDeleted) => {
-      if (rowsDeleted > 0) {
-        res.status(200).json({
-          ok: true,
-          msg: "Cita eliminada.",
-          status: 200,
-          data: rowsDeleted,
-        });
-      } else {
-        res.status(404).json({
-          ok: false,
-          msg: "Cita no encontrada.",
-          status: 404,
-        });
-      }
-    })
-    .catch((error) => {
-      res.status(500).json({
-        ok: false,
-        msg: "Error al eliminar la cita.",
-        status: 500,
-        data: error,
-      });
+  try {
+    const rowsDeleted = await appointment.destroy({ where: { id } });
+    if (rowsDeleted > 0) {
+      res.status(200).json({ ok: true, msg: "Cita eliminada." });
+    } else {
+      res.status(404).json({ ok: false, msg: "Cita no encontrada." });
+    }
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      msg: "Error al eliminar la cita.",
+      error: error.message,
     });
+  }
 };

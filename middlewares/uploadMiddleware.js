@@ -1,16 +1,16 @@
 const multer = require("multer");
 const path = require("path");
 
-// Configuración de almacenamiento para multer
 const storage = multer.diskStorage({
-  // Dónde se guardarán los archivos
   destination: function (req, file, cb) {
-    // Es importante que la carpeta 'public/uploads' exista
     cb(null, "public/uploads/");
   },
-  // Cómo se nombrarán los archivos
   filename: function (req, file, cb) {
-    // Generamos un nombre único para evitar colisiones: user-ID-timestamp.extension
+    // Verificación de seguridad: req.user DEBE existir en este punto.
+    if (!req.user || !req.user.id) {
+      // Si el middleware de autenticación falló, detenemos la subida aquí.
+      return cb(new Error("Autenticación requerida para nombrar el archivo."));
+    }
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
     cb(
       null,
@@ -19,7 +19,6 @@ const storage = multer.diskStorage({
   },
 });
 
-// Filtro para aceptar solo imágenes
 const fileFilter = (req, file, cb) => {
   if (file.mimetype.startsWith("image/")) {
     cb(null, true);
@@ -31,8 +30,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
-  limits: { fileSize: 1024 * 1024 * 5 }, // Límite de 5MB por archivo
+  limits: { fileSize: 1024 * 1024 * 5 },
 });
 
-// Exportamos un middleware que espera un solo archivo con el nombre de campo 'profilePhoto'
 module.exports = upload.single("profilePhoto");

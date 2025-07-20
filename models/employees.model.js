@@ -39,6 +39,10 @@ module.exports = (sequelize, Sequelize) => {
       allowNull: false,
       defaultValue: true,
     },
+    photo: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
   });
 
   return employees;
