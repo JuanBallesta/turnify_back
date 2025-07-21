@@ -54,7 +54,7 @@ exports.getMyAppointments = async (req, res) => {
     if (role === "client") whereCondition.userId = id;
     else if (role === "employee") whereCondition.employeeId = id;
     else if (role === "administrator") {
-      const employeesInBusiness = await Employee.findAll({
+      const employeesInBusiness = await employee.findAll({
         where: { businessId },
         attributes: ["id"],
       });

@@ -223,3 +223,50 @@ exports.updateAssignedEmployees = async (req, res) => {
     });
   }
 };
+
+exports.uploadOfferingPhoto = async (req, res) => {
+  const offeringId = req.params.id;
+
+  if (!req.file) {
+    return res
+      .status(400)
+      .json({ ok: false, msg: "No se ha subido ningún archivo." });
+  }
+
+  try {
+    const offeringToUpdate = await Offering.findByPk(offeringId);
+    if (!offeringToUpdate) {
+      return res
+        .status(404)
+        .json({ ok: false, msg: "Servicio no encontrado." });
+    }
+
+    // Lógica de permisos: solo admins del negocio o superuser
+    if (
+      req.user.role === "administrator" &&
+      Number(req.user.businessId) !== Number(offeringToUpdate.businessId)
+    ) {
+      return res
+        .status(403)
+        .json({
+          ok: false,
+          msg: "No tienes permiso para modificar este servicio.",
+        });
+    }
+
+    // Construimos la URL pública (sin /api)
+    const imageUrl = `/uploads/${req.file.filename}`;
+
+    offeringToUpdate.image = imageUrl;
+    await offeringToUpdate.save();
+
+    res.status(200).json({
+      ok: true,
+      msg: "Imagen del servicio actualizada.",
+      data: { imageUrl },
+    });
+  } catch (error) {
+    console.error("Error al guardar la imagen del servicio:", error);
+    res.status(500).json({ ok: false, msg: "Error al guardar la imagen." });
+  }
+};

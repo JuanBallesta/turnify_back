@@ -6,13 +6,11 @@ const storage = multer.diskStorage({
     cb(null, "public/uploads/");
   },
   filename: function (req, file, cb) {
-    if (!req.user || !req.user.id) {
-      return cb(new Error("Autenticación requerida para nombrar el archivo."));
-    }
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const serviceId = req.params.id || "new";
+    const uniqueSuffix = Date.now();
     cb(
       null,
-      `user-${req.user.id}-${uniqueSuffix}${path.extname(file.originalname)}`
+      `service-${serviceId}-${uniqueSuffix}${path.extname(file.originalname)}`
     );
   },
 });
@@ -31,4 +29,4 @@ const upload = multer({
   limits: { fileSize: 1024 * 1024 * 5 },
 });
 
-module.exports = upload.single("profilePhoto");
+module.exports = upload.single("servicePhoto");

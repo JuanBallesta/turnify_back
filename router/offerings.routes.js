@@ -1,6 +1,7 @@
 const Routes = require("express").Router();
 const offeringController = require("../controllers/offerings.controller");
 const authenticateToken = require("../middlewares/authMiddleware");
+const uploadServiceMiddleware = require("../middlewares/uploadServiceMiddleware");
 
 Routes.use(authenticateToken);
 Routes.post("/", offeringController.createOffering);
@@ -14,4 +15,9 @@ Routes.get("/:id", offeringController.getOneOffering);
 Routes.put("/:id", offeringController.updateOffering);
 Routes.delete("/:id", offeringController.deleteOffering);
 
+Routes.post(
+  "/:id/photo",
+  uploadServiceMiddleware,
+  offeringController.uploadOfferingPhoto
+);
 module.exports = Routes;

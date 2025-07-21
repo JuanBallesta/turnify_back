@@ -1,8 +1,10 @@
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
 require("dotenv").config();
 
 const app = express();
+const port = 3000;
 
 app.use(
   cors({
@@ -10,11 +12,13 @@ app.use(
     credentials: true,
   })
 );
-const port = 3000;
 app.use(express.json());
 
 require("./router/index.routes")(app);
-app.use("/uploads", express.static("public/uploads"));
+
+const uploadsPath = path.join(process.cwd(), "public", "uploads");
+console.log(`Sirviendo archivos estáticos desde: ${uploadsPath}`);
+app.use("/uploads", express.static(uploadsPath));
 
 const db = require("./models/index.model");
 db.sequelize
@@ -27,5 +31,5 @@ db.sequelize
   });
 
 app.listen(port, () => {
-  console.log("Servidor en funcionamiento en el puerto 3000");
+  console.log(`Servidor en funcionamiento en el puerto ${port}`);
 });
