@@ -94,29 +94,57 @@ exports.getMyAppointments = async (req, res) => {
 // Actualizar una cita
 exports.updateAppointment = async (req, res) => {
   const appointmentId = req.params.id;
-  const dataToUpdate = req.body; // Esto será { status: 'cancelled' }
+  const { status } = req.body; // Solo nos interesa el 'status' para esta lógica
 
   try {
-    // 1. Buscamos la instancia de la cita a actualizar
-    const appointmentToUpdate = await appointment.findByPk(appointmentId);
-    if (!appointmentToUpdate) {
+    const appointment = await appointment.findByPk(appointmentId);
+    if (!appointment) {
       return res.status(404).json({ ok: false, msg: "Cita no encontrada." });
     }
 
-    // 2. Aquí podrías añadir lógica de permisos si es necesario
-    // Ej: if (req.user.id !== appointmentToUpdate.userId && req.user.role !== 'administrator') { ... }
+    // --- ¡LÓGICA DE CONTROL DE CANCELACIÓN! ---
+    if (status === "cancelled") {
+      // Regla: Solo se puede cancelar hasta 24 horas antes.
+      const now = new Date();
+      const appointmentTime = new Date(appointment.startTime);
+      const hoursUntilAppointment = (appointmentTime - now) / (1000 * 60 * 60);
 
-    // 3. Actualizamos la instancia con los nuevos datos
-    await appointmentToUpdate.update(dataToUpdate);
+      // Si quedan 24 horas o menos, se prohíbe la cancelación.
+      if (hoursUntilAppointment <= 24) {
+        return res.status(403).json({
+          ok: false,
+          msg: "No se puede cancelar la cita. Quedan menos de 24 horas para su inicio.",
+        });
+      }
 
-    // 4. Devolvemos la respuesta de éxito
-    res.status(200).json({
-      ok: true,
-      msg: "Cita actualizada correctamente.",
-      data: appointmentToUpdate, // Devolvemos la cita actualizada
-    });
+      // Lógica de permisos adicional (quién puede cancelar)
+      const isClientOwner =
+        req.user.role === "client" &&
+        Number(req.user.id) === Number(appointment.userId);
+      const isAdminOrSuperUser =
+        req.user.role === "administrator" || req.user.role === "superuser";
+
+      if (!isClientOwner && !isAdminOrSuperUser) {
+        return res
+          .status(403)
+          .json({
+            ok: false,
+            msg: "No tienes permiso para cancelar esta cita.",
+          });
+      }
+    }
+
+    await appointment.update({ status }); // Actualizamos solo el estado
+
+    res
+      .status(200)
+      .json({
+        ok: true,
+        msg: "Cita actualizada correctamente.",
+        data: appointment,
+      });
   } catch (error) {
-    console.error("<<<<< ERROR FATAL AL ACTUALIZAR CITA >>>>>", error);
+    console.error("Error al actualizar la cita:", error);
     res.status(500).json({ ok: false, msg: "Error al actualizar la cita." });
   }
 };

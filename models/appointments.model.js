@@ -10,7 +10,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
     },
     status: {
-      type: DataTypes.STRING,
+      type: DataTypes.ENUM("scheduled", "completed", "cancelled", "no-show"),
       allowNull: false,
       defaultValue: "scheduled",
     },

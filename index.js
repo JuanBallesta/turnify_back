@@ -23,6 +23,7 @@ app.use("/uploads", express.static(uploadsPath));
 const db = require("./models/index.model");
 db.sequelize
   .sync()
+  // .sync({ alter: true })
   .then(() => {
     console.log("Base de datos conectada");
   })
