@@ -1,7 +1,6 @@
 const db = require("../models/index.model");
 const { Op } = require("sequelize");
 
-// --- ESTANDARIZACIÓN: Usamos PascalCase para todos los modelos ---
 const appointment = db.appointments;
 const offering = db.offerings;
 const employee = db.employees;
@@ -10,7 +9,7 @@ const business = db.businesses;
 
 if (!appointment || !offering || !employee || !user || !business) {
   console.error(
-    "ERROR CRÍTICO: Uno o más modelos no se cargaron para el appointments.controller."
+    "ERROR CRÍTICO: Uno o más modelos no se cargaron para appointments.controller."
   );
 }
 
@@ -19,7 +18,6 @@ exports.createAppointment = async (req, res) => {
   const { employeeId, offeringId, startTime, endTime, notes, status } =
     req.body;
   const userId = req.user.id;
-
   try {
     const newAppointment = await appointment.create({
       userId,
@@ -49,23 +47,43 @@ exports.createAppointment = async (req, res) => {
 exports.getMyAppointments = async (req, res) => {
   const { id, role, businessId } = req.user;
 
+  // 1. Leer parámetros de paginación de la URL
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 5;
+  const offset = (page - 1) * limit;
+
   try {
     let whereCondition = {};
-    if (role === "client") whereCondition.userId = id;
-    else if (role === "employee") whereCondition.employeeId = id;
-    else if (role === "administrator") {
+
+    // 2. Construir la condición de filtro por rol
+    if (role === "client") {
+      whereCondition.userId = id;
+    } else if (role === "employee") {
+      whereCondition.employeeId = id;
+    } else if (role === "administrator") {
       const employeesInBusiness = await employee.findAll({
         where: { businessId },
         attributes: ["id"],
       });
       const employeeIds = employeesInBusiness.map((e) => e.id);
-      if (employeeIds.length === 0)
-        return res.status(200).json({ ok: true, data: [] });
+      if (employeeIds.length === 0) {
+        return res.status(200).json({
+          ok: true,
+          data: {
+            totalItems: 0,
+            totalPages: 0,
+            currentPage: 1,
+            appointments: [],
+          },
+        });
+      }
       whereCondition.employeeId = { [Op.in]: employeeIds };
     }
 
-    const appointments = await appointment.findAll({
+    const { count, rows } = await appointment.findAndCountAll({
       where: whereCondition,
+      limit: limit,
+      offset: offset,
       include: [
         {
           model: offering,
@@ -78,13 +96,30 @@ exports.getMyAppointments = async (req, res) => {
             },
           ],
         },
-        { model: employee, as: "employee", attributes: ["name", "lastName"] },
-        { model: user, as: "client", attributes: ["name", "lastName"] },
+        {
+          model: employee,
+          as: "employee",
+          attributes: ["name", "lastName", "photo"],
+        },
+        {
+          model: user,
+          as: "client",
+          attributes: ["name", "lastName", "photo"],
+        },
       ],
       order: [["startTime", "DESC"]],
+      distinct: true,
     });
 
-    res.status(200).json({ ok: true, data: appointments });
+    res.status(200).json({
+      ok: true,
+      data: {
+        totalItems: count,
+        totalPages: Math.ceil(count / limit),
+        currentPage: page,
+        appointments: rows,
+      },
+    });
   } catch (error) {
     console.error("<<<<< ERROR FATAL EN getMyAppointments >>>>>", error);
     res.status(500).json({ ok: false, msg: "Error al obtener las citas." });
@@ -94,55 +129,45 @@ exports.getMyAppointments = async (req, res) => {
 // Actualizar una cita
 exports.updateAppointment = async (req, res) => {
   const appointmentId = req.params.id;
-  const { status } = req.body; // Solo nos interesa el 'status' para esta lógica
+  const { status } = req.body;
 
   try {
-    const appointment = await appointment.findByPk(appointmentId);
-    if (!appointment) {
+    const appointmentToUpdate = await appointment.findByPk(appointmentId);
+    if (!appointmentToUpdate) {
       return res.status(404).json({ ok: false, msg: "Cita no encontrada." });
     }
 
-    // --- ¡LÓGICA DE CONTROL DE CANCELACIÓN! ---
-    if (status === "cancelled") {
-      // Regla: Solo se puede cancelar hasta 24 horas antes.
-      const now = new Date();
-      const appointmentTime = new Date(appointment.startTime);
-      const hoursUntilAppointment = (appointmentTime - now) / (1000 * 60 * 60);
+    const now = new Date();
+    const appointmentStartTime = new Date(appointmentToUpdate.startTime);
+    const hasStarted = now >= appointmentStartTime;
 
-      // Si quedan 24 horas o menos, se prohíbe la cancelación.
-      if (hoursUntilAppointment <= 24) {
+    if (status === "cancelled") {
+      if (hasStarted)
         return res.status(403).json({
           ok: false,
-          msg: "No se puede cancelar la cita. Quedan menos de 24 horas para su inicio.",
+          msg: "No se puede cancelar una cita que ya ha comenzado.",
         });
-      }
-
-      // Lógica de permisos adicional (quién puede cancelar)
-      const isClientOwner =
-        req.user.role === "client" &&
-        Number(req.user.id) === Number(appointment.userId);
-      const isAdminOrSuperUser =
-        req.user.role === "administrator" || req.user.role === "superuser";
-
-      if (!isClientOwner && !isAdminOrSuperUser) {
-        return res
-          .status(403)
-          .json({
-            ok: false,
-            msg: "No tienes permiso para cancelar esta cita.",
-          });
-      }
     }
 
-    await appointment.update({ status }); // Actualizamos solo el estado
+    if (status === "completed" || status === "no-show") {
+      if (req.user.role === "client")
+        return res.status(403).json({
+          ok: false,
+          msg: "Un cliente no puede realizar esta acción.",
+        });
+      if (!hasStarted)
+        return res.status(403).json({
+          ok: false,
+          msg: "Esta acción solo se puede realizar después de la hora de inicio.",
+        });
+    }
 
-    res
-      .status(200)
-      .json({
-        ok: true,
-        msg: "Cita actualizada correctamente.",
-        data: appointment,
-      });
+    await appointmentToUpdate.update({ status });
+    res.status(200).json({
+      ok: true,
+      msg: "Estado de la cita actualizado.",
+      data: appointmentToUpdate,
+    });
   } catch (error) {
     console.error("Error al actualizar la cita:", error);
     res.status(500).json({ ok: false, msg: "Error al actualizar la cita." });
