@@ -34,7 +34,7 @@ exports.createAppointment = async (req, res) => {
       data: newAppointment,
     });
   } catch (error) {
-    console.error("<<<<< ERROR FATAL AL CREAR CITA >>>>>", error);
+    console.error("ERROR AL CREAR CITA ", error);
     res.status(500).json({
       ok: false,
       msg: "Error al crear la cita.",
@@ -47,15 +47,15 @@ exports.createAppointment = async (req, res) => {
 exports.getMyAppointments = async (req, res) => {
   const { id, role, businessId } = req.user;
 
-  // 1. Leer parámetros de paginación de la URL
   const page = parseInt(req.query.page, 10) || 1;
-  const limit = parseInt(req.query.limit, 10) || 5;
+  const limit = parseInt(req.query.limit, 5) || 5;
+  const status = req.query.status;
+  const search = req.query.search;
   const offset = (page - 1) * limit;
+  const dateFilter = req.query.dateFilter;
 
   try {
     let whereCondition = {};
-
-    // 2. Construir la condición de filtro por rol
     if (role === "client") {
       whereCondition.userId = id;
     } else if (role === "employee") {
@@ -74,41 +74,62 @@ exports.getMyAppointments = async (req, res) => {
             totalPages: 0,
             currentPage: 1,
             appointments: [],
+            stats: {},
           },
         });
       }
       whereCondition.employeeId = { [Op.in]: employeeIds };
     }
 
+    if (status && status !== "all") {
+      whereCondition.status = status;
+    }
+
+    let includeWhere = {};
+    if (search) {
+      const searchQuery = { [Op.like]: `%${search}%` };
+      includeWhere = {
+        [Op.or]: [
+          { "$offering.name$": searchQuery },
+          { "$client.name$": searchQuery },
+          { "$client.lastName$": searchQuery },
+          { "$employee.name$": searchQuery },
+          { "$employee.lastName$": searchQuery },
+        ],
+      };
+    }
+
+    if (dateFilter && dateFilter !== "all") {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+
+      if (dateFilter === "today") {
+        whereCondition.startTime = { [Op.between]: [today, endOfToday] };
+      } else if (dateFilter === "upcoming") {
+        whereCondition.startTime = { [Op.gte]: today };
+      } else if (dateFilter === "past") {
+        whereCondition.startTime = { [Op.lt]: today };
+      }
+    }
+
     const { count, rows } = await appointment.findAndCountAll({
-      where: whereCondition,
-      limit: limit,
-      offset: offset,
+      where: { ...whereCondition, ...includeWhere },
+      limit,
+      offset,
       include: [
         {
           model: offering,
           as: "offering",
-          include: [
-            {
-              model: business,
-              as: "business",
-              attributes: ["name", "address"],
-            },
-          ],
+          include: [{ model: business, as: "business" }],
         },
-        {
-          model: employee,
-          as: "employee",
-          attributes: ["name", "lastName", "photo"],
-        },
-        {
-          model: user,
-          as: "client",
-          attributes: ["name", "lastName", "photo"],
-        },
+        { model: employee, as: "employee" },
+        { model: user, as: "client" },
       ],
       order: [["startTime", "DESC"]],
       distinct: true,
+      subQuery: false,
     });
 
     res.status(200).json({
@@ -121,8 +142,66 @@ exports.getMyAppointments = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("<<<<< ERROR FATAL EN getMyAppointments >>>>>", error);
+    console.error("ERROR EN getMyAppointments", error);
     res.status(500).json({ ok: false, msg: "Error al obtener las citas." });
+  }
+};
+
+exports.getAppointmentStats = async (req, res) => {
+  const { id, role, businessId } = req.user;
+
+  try {
+    let whereCondition = {};
+    if (role === "client") {
+      whereCondition.userId = id;
+    } else if (role === "employee") {
+      whereCondition.employeeId = id;
+    } else if (role === "administrator") {
+      const employeesInBusiness = await employee.findAll({
+        where: { businessId },
+        attributes: ["id"],
+      });
+      const employeeIds = employeesInBusiness.map((e) => e.id);
+      if (employeeIds.length === 0) {
+        return res.status(200).json({
+          ok: true,
+          data: {
+            total: 0,
+            scheduled: 0,
+            completed: 0,
+            cancelled: 0,
+            "no-show": 0,
+          },
+        });
+      }
+      whereCondition.employeeId = { [Op.in]: employeeIds };
+    }
+
+    const allAppointmentsForStats = await appointment.findAll({
+      where: whereCondition,
+      attributes: ["status"],
+    });
+
+    const stats = {
+      total: 0,
+      scheduled: 0,
+      completed: 0,
+      cancelled: 0,
+      "no-show": 0,
+    };
+    for (const apt of allAppointmentsForStats) {
+      if (stats.hasOwnProperty(apt.status)) {
+        stats[apt.status]++;
+      }
+      stats.total++;
+    }
+
+    res.status(200).json({ ok: true, data: stats });
+  } catch (error) {
+    console.error("ERROR EN getAppointmentStats", error);
+    res
+      .status(500)
+      .json({ ok: false, msg: "Error al obtener las estadísticas." });
   }
 };
 
