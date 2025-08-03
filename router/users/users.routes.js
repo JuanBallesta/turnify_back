@@ -5,16 +5,23 @@ const authenticateToken = require("../../middlewares/authenticateToken");
 const uploadMiddleware = require("../../middlewares/uploadMiddleware");
 const profileController = require("../../controllers/profile.controller");
 
+// --- RUTAS PÚBLICAS (Sin autenticación) ---
 Routes.post("/", authClientsController.register);
+
+// --- RUTAS PROTEGIDAS (Requieren token) ---
+Routes.get("/search", authenticateToken, userController.searchUsers);
+Routes.post("/guest", authenticateToken, userController.createGuestUser);
+Routes.get("/by-email", authenticateToken, userController.findUserByEmail);
+
 Routes.get("/:id", authenticateToken, userController.getOneUser);
 Routes.put("/:id", authenticateToken, userController.updateUser);
-
-// Routes.delete("/:id", authenticateToken, userController.deleteUser);
-
 Routes.post(
   "/:id/photo",
-  authenticateToken, // 1. PRIMERO, se ejecuta la autenticación y se crea req.user
-  uploadMiddleware, // 2. SEGUNDO, multer se ejecuta y AHORA SÍ tiene acceso a req.user
-  profileController.uploadClientPhoto // 3. TERCERO, el controlador final
+  authenticateToken,
+  uploadMiddleware,
+  profileController.uploadClientPhoto
 );
+
+Routes.delete("/:id", authenticateToken, userController.deleteUser);
+
 module.exports = Routes;

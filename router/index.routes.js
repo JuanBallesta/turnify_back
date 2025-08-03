@@ -33,4 +33,7 @@ module.exports = (app) => {
   app.use("/availability", availabilityRoutes);
 
   app.use("/dashboard", require("./dashboard.routes"));
+
+  const publicRoutes = require("./public.routes");
+  app.use("/public", publicRoutes);
 };

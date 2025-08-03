@@ -2,6 +2,7 @@ const Routes = require("express").Router();
 const businessController = require("../controllers/businesses.controller");
 const authenticateToken = require("../middlewares/authMiddleware");
 const authenticateAdminToken = require("../middlewares/authAdminMiddleware");
+const uploadMiddleware = require("../middlewares/uploadMiddleware");
 
 Routes.get(
   "/all",
@@ -19,6 +20,12 @@ Routes.delete(
   businessController.deleteBusiness
 );
 
-Routes.get("/:id", authenticateToken, businessController.getOneBusiness);
+Routes.get("/:id", businessController.getOneBusiness);
+Routes.post(
+  "/:id/logo",
+  authenticateToken,
+  uploadMiddleware,
+  businessController.uploadBusinessLogo
+);
 
 module.exports = Routes;

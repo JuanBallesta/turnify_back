@@ -7,11 +7,14 @@ const Business = db.businesses;
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
+/**
+ * Registra un nuevo empleado y crea su perfil de cliente asociado.
+ */
 exports.register = async (req, res) => {
   const {
     name,
     lastName,
-    userName,
+    username,
     password,
     email,
     phone,
@@ -19,90 +22,86 @@ exports.register = async (req, res) => {
     userTypeId,
     isActive,
   } = req.body;
+  const t = await db.sequelize.transaction(); // Iniciar una transacción
 
   try {
+    // Verificación de duplicados en la tabla Employees
     const existingEmployee = await Employee.findOne({
       where: {
-        [db.Sequelize.Op.or]: [{ email: email }, { userName: userName }],
+        [db.Sequelize.Op.or]: [{ email: email }, { username: username }],
       },
     });
 
     if (existingEmployee) {
-      if (existingEmployee.email === email) {
-        return res.status(409).json({
-          ok: false,
-          msg: "Conflicto de datos.",
-          errors: [
-            {
-              path: "email", // El campo que causó el error
-              msg: "Este correo electrónico ya está en uso.",
-            },
-          ],
-        });
-      }
-
-      if (existingEmployee.userName === userName) {
-        return res.status(409).json({
-          ok: false,
-          msg: "Conflicto de datos.",
-          errors: [
-            {
-              path: "userName", // El campo que causó el error
-              msg: "Este nombre de usuario ya está registrado. Por favor, elige otro.",
-            },
-          ],
-        });
-      }
+      const field = existingEmployee.email === email ? "email" : "username";
+      return res.status(409).json({
+        ok: false,
+        msg: `El ${field} ya está en uso.`,
+        errors: [{ path: field, msg: `Este ${field} ya está registrado.` }],
+      });
     }
 
-    // Hasheamos la contraseña antes de guardarla
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Creamos el nuevo empleado en la base de datos
-    const newEmployee = await Employee.create({
-      name,
-      lastName,
-      userName,
-      password: hashedPassword,
-      email,
-      phone,
-      businessId,
-      userTypeId,
-      isActive: isActive ?? true,
+    // 1. Crear el registro de Empleado
+    const newEmployee = await Employee.create(
+      {
+        name,
+        lastName,
+        username,
+        password: hashedPassword,
+        email,
+        phone,
+        businessId,
+        userTypeId,
+        isActive: isActive ?? true,
+      },
+      { transaction: t }
+    );
+
+    // 2. Crear o encontrar la "contraparte" de Cliente en la tabla Users
+    const [clientProfile, created] = await User.findOrCreate({
+      where: { email: email },
+      defaults: {
+        name,
+        lastName,
+        email,
+        phone,
+        username: `client_${username}`,
+        password: hashedPassword,
+      },
+      transaction: t,
     });
+
+    await t.commit(); // Confirmar ambos cambios en la base de datos
+
     res.status(201).json({
       ok: true,
-      msg: "Empleado registrado correctamente.",
+      msg: "Empleado registrado exitosamente (con perfil de cliente asociado).",
       data: newEmployee,
     });
   } catch (error) {
-    console.error("Error inesperado al registrar empleado:", error);
+    await t.rollback(); // Revertir la transacción si algo falla
+    console.error("Error al registrar empleado:", error);
     res.status(500).json({
       ok: false,
-      msg: "Error interno del servidor al intentar registrar el usuario.",
+      msg: "Error interno al registrar el usuario.",
       error: error.message,
     });
   }
 };
 
-// Login
+/**
+ * Inicia sesión para un empleado (admin, superuser, etc.)
+ */
 exports.login = async (req, res) => {
   const { userName, password } = req.body;
-
   try {
     const employee = await Employee.findOne({
-      where: { userName },
+      where: { userName: userName }, // Corregido para usar la variable correcta
       include: [
-        {
-          model: UserType,
-          as: "userType",
-          attributes: ["name"],
-        },
-        {
-          model: Business,
-          as: "business",
-          attributes: ["name"],
-        },
+        { model: UserType, as: "userType", attributes: ["name"] },
+        { model: Business, as: "business", attributes: ["name"] },
       ],
     });
 
@@ -115,15 +114,8 @@ exports.login = async (req, res) => {
       return res.status(401).json({ ok: false, msg: "Contraseña incorrecta" });
     }
 
-    if (!employee.userType || !employee.userType.name) {
-      return res
-        .status(500)
-        .json({ ok: false, msg: "Error de configuración: Rol no asignado." });
-    }
-
     const roleFromDB = employee.userType.name;
     let standardizedRole;
-
     switch (roleFromDB) {
       case "Super Usuario":
         standardizedRole = "superuser";
@@ -135,16 +127,13 @@ exports.login = async (req, res) => {
         standardizedRole = "employee";
         break;
       default:
-        console.warn(
-          `Rol desconocido en la base de datos: "${roleFromDB}". Asignando 'employee'.`
-        );
         standardizedRole = "employee";
     }
 
     const token = jwt.sign(
       {
         id: employee.id,
-        userName: employee.userName,
+        userName: employee.username,
         email: employee.email,
         role: standardizedRole,
         businessId: employee.businessId,
@@ -159,7 +148,7 @@ exports.login = async (req, res) => {
       name: employee.name,
       lastName: employee.lastName,
       email: employee.email,
-      userName: employee.userName,
+      userName: employee.username,
       phone: employee.phone,
       photo: employee.photo,
       role: standardizedRole,
@@ -167,19 +156,18 @@ exports.login = async (req, res) => {
       businessName: employee.business?.name,
     };
 
-    res.status(200).json({
-      ok: true,
-      msg: "Login exitoso",
-      token,
-      user: userResponse,
-    });
+    res
+      .status(200)
+      .json({ ok: true, msg: "Login exitoso", token, user: userResponse });
   } catch (error) {
-    console.error("Error detallado en login de admin:", error);
-    res.status(500).json({
-      ok: false,
-      msg: "Error interno del servidor",
-      error: error.message,
-    });
+    console.error("Error en login de admin:", error);
+    res
+      .status(500)
+      .json({
+        ok: false,
+        msg: "Error interno del servidor",
+        error: error.message,
+      });
   }
 };
 

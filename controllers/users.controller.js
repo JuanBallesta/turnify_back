@@ -1,4 +1,5 @@
 const db = require("../models/index.model");
+const { Op } = require("sequelize");
 const bcrypt = require("bcrypt");
 const users = db.users;
 
@@ -241,5 +242,122 @@ exports.uploadProfilePhoto = async (req, res) => {
     // ESTE LOG NOS DIRÁ SI EL ERROR ESTÁ EN LA BASE DE DATOS
     console.error("<<<<< ERROR FATAL AL GUARDAR LA FOTO EN LA DB >>>>>", error);
     res.status(500).json({ ok: false, msg: "Error al guardar la foto." });
+  }
+};
+
+exports.findUserByEmail = async (req, res) => {
+  const { email } = req.query;
+
+  if (!email) {
+    return res.status(400).json({ ok: false, msg: "Se requiere un email." });
+  }
+
+  try {
+    const cleanedEmail = email.trim().toLowerCase();
+
+    console.log(`Buscando usuario con email limpio: '${cleanedEmail}'`);
+
+    const user = await users.findOne({
+      where: db.sequelize.where(
+        db.sequelize.fn("LOWER", db.sequelize.col("email")),
+        cleanedEmail
+      ),
+    });
+
+    // 3. Verificamos el resultado
+    if (!user) {
+      console.log(
+        `No se encontró ningún usuario con el email '${cleanedEmail}'`
+      );
+      return res.status(404).json({ ok: false, msg: "Usuario no encontrado." });
+    }
+
+    console.log("¡Usuario encontrado! ID:", user.id);
+    res.status(200).json({ ok: true, data: user });
+  } catch (error) {
+    console.error("<<<<< ERROR FATAL EN findUserByEmail >>>>>", error);
+    res.status(500).json({ ok: false, msg: "Error interno del servidor." });
+  }
+};
+
+exports.searchUsers = async (req, res) => {
+  const { query } = req.query;
+
+  // LOG 1: Verificar que la petición llega
+  console.log(
+    `BACKEND_SEARCH: Petición de búsqueda recibida. Query: "${query}"`
+  );
+
+  if (!query || query.length < 2) {
+    return res.status(200).json({ ok: true, data: [] });
+  }
+
+  try {
+    const searchPattern = `%${query}%`;
+    console.log(
+      `BACKEND_SEARCH: Usando patrón de búsqueda LIKE: "${searchPattern}"`
+    );
+
+    const foundUsers = await users.findAll({
+      where: {
+        [Op.or]: [
+          // ¡ASEGÚRATE DE QUE ESTOS NOMBRES DE COLUMNA SEAN CORRECTOS!
+          { userName: { [Op.like]: searchPattern } },
+          { email: { [Op.like]: searchPattern } },
+        ],
+      },
+      limit: 10,
+      attributes: ["id", "name", "lastName", "email", "phone", "userName"],
+    });
+
+    // LOG 2: Ver el resultado de la consulta
+    console.log(
+      `BACKEND_SEARCH: La consulta a la DB encontró ${foundUsers.length} usuarios.`
+    );
+
+    res.status(200).json({ ok: true, data: foundUsers });
+  } catch (error) {
+    console.error("<<<<< ERROR FATAL en searchUsers >>>>>", error);
+    res.status(500).json({ ok: false, msg: "Error al buscar usuarios." });
+  }
+};
+
+exports.createGuestUser = async (req, res) => {
+  const { name, lastName, phone, email } = req.body;
+
+  if (!name || !lastName || !phone) {
+    return res
+      .status(400)
+      .json({ ok: false, msg: "Nombre, apellido y teléfono son requeridos." });
+  }
+
+  // Generamos una contraseña y username aleatorios
+  const tempPassword = require("crypto").randomBytes(8).toString("hex");
+  const hashedPassword = await bcrypt.hash(tempPassword, 10);
+  const guestUsername = `guest_${Date.now()}`;
+  const guestEmail = email || `${guestUsername}@guest.com`;
+
+  try {
+    // Usamos findOrCreate para evitar duplicados si se proporciona un email que ya existe
+    const [guestUser, created] = await users.findOrCreate({
+      where: { email: guestEmail },
+      defaults: {
+        name,
+        lastName,
+        phone,
+        email: guestEmail,
+        userName: guestUsername,
+        password: hashedPassword,
+      },
+    });
+
+    res
+      .status(created ? 201 : 200)
+      .json({ ok: true, msg: "Usuario invitado gestionado.", data: guestUser });
+  } catch (error) {
+    console.error("Error en createGuestUser:", error);
+    res
+      .status(500)
+      .json({ ok: false, msg: "Error al crear usuario invitado." });
   }
 };

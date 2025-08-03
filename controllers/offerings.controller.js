@@ -56,28 +56,35 @@ exports.createOffering = async (req, res) => {
 
 // Obtener todos los offerings (filtrado por rol)
 exports.getAllOfferings = async (req, res) => {
+  const { role, businessId } = req.user;
+  const { context } = req.query; // 'booking' o 'management'
+
   try {
-    const whereCondition = {};
-    if (req.user.role === "administrator") {
-      whereCondition.businessId = req.user.businessId;
-    }
-    if (req.user.role === "superuser" && req.query.businessId) {
-      whereCondition.businessId = req.query.businessId;
+    let whereCondition = {};
+
+    if (context === "booking") {
+      // Para la página de reserva, traemos TODOS los servicios ACTIVOS
+      whereCondition.isActive = true;
+    } else {
+      // context === 'management' o no definido
+      // Para la página de gestión, aplicamos filtros por rol
+      if (role === "administrator") {
+        whereCondition.businessId = businessId;
+        // No filtramos por isActive para que el admin pueda ver y activar/desactivar
+      }
+      // Si es superuser, no aplicamos filtro para que vea todo
     }
 
     const offerings = await Offering.findAll({
       where: whereCondition,
       include: [{ model: Business, as: "business", attributes: ["name"] }],
+      order: [["name", "ASC"]],
     });
-    res
-      .status(200)
-      .json({ ok: true, msg: "Lista de servicios obtenida.", data: offerings });
+
+    res.status(200).json({ ok: true, data: offerings });
   } catch (error) {
-    res.status(500).json({
-      ok: false,
-      msg: "Error al obtener los servicios.",
-      error: error.message,
-    });
+    console.error("Error en getAllOfferings:", error);
+    res.status(500).json({ ok: false, msg: "Error al obtener los servicios." });
   }
 };
 
@@ -173,7 +180,7 @@ exports.getOfferingWithAssignedEmployees = async (req, res) => {
         {
           model: Employee,
           as: "employees",
-          attributes: ["id", "name", "lastName"],
+          attributes: ["id", "name", "lastName", "photo"],
           through: { attributes: [] },
         },
       ],
@@ -246,12 +253,10 @@ exports.uploadOfferingPhoto = async (req, res) => {
       req.user.role === "administrator" &&
       Number(req.user.businessId) !== Number(offeringToUpdate.businessId)
     ) {
-      return res
-        .status(403)
-        .json({
-          ok: false,
-          msg: "No tienes permiso para modificar este servicio.",
-        });
+      return res.status(403).json({
+        ok: false,
+        msg: "No tienes permiso para modificar este servicio.",
+      });
     }
 
     // Construimos la URL pública (sin /api)

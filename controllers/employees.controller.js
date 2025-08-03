@@ -131,102 +131,92 @@ exports.getOneEmployee = (req, res) => {
 
 // Actualizar un empleado
 exports.updateEmployee = async (req, res) => {
-  const employeeIdToUpdate = req.params.id;
+  const employeeId = req.params.id;
+  const dataToUpdate = req.body;
   const authenticatedUser = req.user;
 
+  console.log(
+    `[UPDATE EMPLOYEE] Petición para actualizar empleado ID: ${employeeId}`
+  );
+  console.log("[UPDATE EMPLOYEE] Datos recibidos:", dataToUpdate);
+
   try {
-    const employeeToUpdate = await employee.findByPk(employeeIdToUpdate);
+    const employeeToUpdate = await employee.findByPk(employeeId);
     if (!employeeToUpdate) {
       return res
         .status(404)
         .json({ ok: false, msg: "Empleado no encontrado." });
     }
 
-    // Lógica de permisos (ya está correcta y es robusta)
+    // --- Lógica de Permisos ---
+    const isSelf = parseInt(authenticatedUser.id) === parseInt(employeeId);
     const isAdmin = authenticatedUser.role === "administrator";
     const isSuperUser = authenticatedUser.role === "superuser";
-    const isSelf =
-      parseInt(authenticatedUser.id) === parseInt(employeeIdToUpdate);
-    let hasPermission = isSelf || isSuperUser;
-    if (isAdmin && !isSelf) {
-      const adminBusinessId = Number(authenticatedUser.businessId);
-      const employeeBusinessId = Number(employeeToUpdate.businessId);
-      if (
-        adminBusinessId &&
-        employeeBusinessId &&
-        adminBusinessId === employeeBusinessId
-      ) {
-        hasPermission = true;
-      }
-    }
-    if (!hasPermission) {
-      return res.status(403).json({ ok: false, msg: "Acceso denegado." });
-    }
 
-    // --- LÓGICA DE ACTUALIZACIÓN FLEXIBLE (LA SOLUCIÓN) ---
-    // Leemos TODOS los posibles campos del body
-    const { name, lastName, phone, notes, businessId, userTypeId, isActive } =
-      req.body;
-    const updatedFields = {};
-
-    // Comprobamos cada campo y lo añadimos si fue proporcionado en la petición
-    if (name !== undefined) updatedFields.name = name;
-    if (lastName !== undefined) updatedFields.lastName = lastName;
-    if (phone !== undefined) updatedFields.phone = phone;
-    if (notes !== undefined) updatedFields.notes = notes;
-    if (businessId !== undefined) updatedFields.businessId = businessId;
-    if (userTypeId !== undefined) updatedFields.userTypeId = userTypeId;
-    if (isActive !== undefined) updatedFields.isActive = isActive;
-
-    // Reglas de negocio sobre los campos a actualizar
-    if (updatedFields.businessId && !isSuperUser) {
-      delete updatedFields.businessId;
-    }
-    if (updatedFields.userTypeId) {
-      const targetRole = await userTypes.findByPk(updatedFields.userTypeId);
-      if (
-        targetRole &&
-        targetRole.name.toLowerCase() === "super usuario" &&
-        !isSuperUser
-      ) {
-        return res.status(403).json({
-          ok: false,
-          msg: "No tienes permiso para asignar el rol de Super Usuario.",
-        });
-      }
-    }
-
-    if (Object.keys(updatedFields).length === 0) {
-      return res.status(400).json({
+    // Un admin solo puede editar empleados de su propio negocio
+    if (
+      isAdmin &&
+      !isSuperUser &&
+      parseInt(authenticatedUser.businessId) !==
+        parseInt(employeeToUpdate.businessId)
+    ) {
+      return res.status(403).json({
         ok: false,
-        msg: "No se proporcionaron datos para actualizar.",
+        msg: "No puedes editar empleados de otro negocio.",
       });
     }
 
-    await employeeToUpdate.update(updatedFields);
+    // --- Medidas de Seguridad ---
+    // Si un empleado se edita a sí mismo (desde /profile), solo puede cambiar ciertos campos.
+    if (isSelf) {
+      delete dataToUpdate.businessId;
+      delete dataToUpdate.userTypeId;
+      delete dataToUpdate.isActive;
+      delete dataToUpdate.role; // Un usuario no puede cambiarse su propio rol
+    }
+    // Nadie puede cambiar el email o el userName desde este endpoint para evitar conflictos
+    delete dataToUpdate.email;
+    delete dataToUpdate.userName;
+    // La contraseña se cambia en otro endpoint
+    delete dataToUpdate.password;
 
-    const updatedEmployeeWithDetails = await employee.findByPk(
-      employeeIdToUpdate,
-      {
-        include: [
-          { model: userTypes, as: "userType" },
-          { model: business, as: "business" },
-        ],
-      }
+    console.log(
+      "[UPDATE EMPLOYEE] Datos limpios para actualizar:",
+      dataToUpdate
     );
 
+    await employeeToUpdate.update(dataToUpdate);
+
+    // Devolvemos el empleado actualizado con sus asociaciones para refrescar el frontend
+    const updatedEmployee = await employee.findByPk(employeeId, {
+      include: [
+        { model: business, as: "business", attributes: ["name"] },
+        { model: userTypes, as: "userType", attributes: ["name"] },
+      ],
+    });
+
+    // Construimos la respuesta consistente con el login
+    const userResponse = {
+      ...updatedEmployee.toJSON(),
+      role: authenticatedUser.role, // Mantenemos el rol del token
+      businessName: updatedEmployee.business?.name,
+    };
+
+    console.log("[UPDATE EMPLOYEE] Actualización exitosa.");
     res.status(200).json({
       ok: true,
-      msg: "Empleado actualizado correctamente.",
-      user: updatedEmployeeWithDetails, // Devolvemos en 'user' para consistencia
+      msg: "Perfil actualizado correctamente.",
+      user: userResponse, // Devolvemos en 'user' para consistencia
     });
   } catch (error) {
-    console.error("Error al actualizar el empleado:", error);
-    res.status(500).json({
-      ok: false,
-      msg: "Error al actualizar el empleado.",
-      error: error.message,
-    });
+    // --- ESTE LOG NOS DIRÁ EL PROBLEMA EXACTO ---
+    console.error(
+      "<<<<< ERROR FATAL AL ACTUALIZAR PERFIL DE EMPLEADO >>>>>",
+      error
+    );
+    res
+      .status(500)
+      .json({ ok: false, msg: "Error interno al actualizar el perfil." });
   }
 };
 
