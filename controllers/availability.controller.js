@@ -1,16 +1,11 @@
 const db = require("../models/index.model");
 const { Op } = require("sequelize");
 
-// Asegúrate de que los nombres de los modelos coincidan con tu index.model.js
 const Offering = db.offerings;
 const Employee = db.employees;
 const Schedule = db.schedule;
 const Appointment = db.appointments;
 
-/**
- * Calcula los horarios disponibles para un servicio en una fecha específica,
- * opcionalmente filtrado por un empleado.
- */
 exports.getAvailability = async (req, res) => {
   const { serviceId, date, employeeId } = req.query;
 
@@ -135,7 +130,6 @@ exports.getAvailability = async (req, res) => {
   }
 };
 
-// --- Funciones de ayuda ---
 function combineDateAndTime(date, timeStr) {
   const [hours, minutes] = timeStr.split(":");
   const newDate = new Date(date);
@@ -146,3 +140,118 @@ function combineDateAndTime(date, timeStr) {
 function formatTime(date) {
   return date.toTimeString().slice(0, 5);
 }
+
+exports.getDailySchedule = async (req, res) => {
+  const { businessId, date } = req.query;
+  if (!businessId || !date)
+    return res
+      .status(400)
+      .json({ ok: false, msg: "Se requiere businessId y date." });
+
+  try {
+    const targetDate = new Date(`${date}T00:00:00`);
+    const dayOfWeek = targetDate.getDay();
+
+    const employeesWithSchedules = await Employee.findAll({
+      where: { businessId, isActive: true },
+      include: [
+        {
+          model: Schedule,
+          as: "schedules",
+          where: { dayOfWeek },
+          required: false,
+        },
+      ],
+    });
+
+    const employeeIds = employeesWithSchedules.map((e) => e.id);
+    if (employeeIds.length === 0)
+      return res.status(200).json({ ok: true, data: [] });
+
+    const startOfDay = new Date(`${date}T00:00:00.000Z`);
+    const endOfDay = new Date(`${date}T23:59:59.999Z`);
+
+    const appointments = await Appointment.findAll({
+      where: {
+        employeeId: { [Op.in]: employeeIds },
+        status: "scheduled",
+        startTime: {
+          [Op.between]: [startOfDay, endOfDay],
+        },
+      },
+      include: [
+        {
+          model: Offering,
+          as: "offering",
+          attributes: ["name", "durationMinutes"],
+        },
+      ],
+    });
+
+    const scheduleData = employeesWithSchedules.map((employee) => {
+      const employeeAppointments = appointments.filter(
+        (a) => a.employeeId === employee.id
+      );
+      return {
+        employee: {
+          id: employee.id,
+          name: `${employee.name} ${employee.lastName}`,
+          photo: employee.photo,
+        },
+        schedules: employee.schedules || [],
+        appointments: employeeAppointments,
+      };
+    });
+
+    res.status(200).json({ ok: true, data: scheduleData });
+  } catch (error) {
+    console.error("<<<<< ERROR FATAL EN getDailySchedule >>>>>", error);
+    res
+      .status(500)
+      .json({ ok: false, msg: "Error al obtener el horario diario." });
+  }
+};
+
+exports.getScheduleForEmployeesByDate = async (req, res) => {
+  const { employeeIds, date } = req.query;
+  if (!employeeIds || !date)
+    return res.status(400).json({ ok: false, msg: "Faltan parámetros." });
+
+  const ids = employeeIds.split(",").map(Number);
+  const targetDate = new Date(`${date}T00:00:00`);
+  const dayOfWeek = targetDate.getDay();
+
+  try {
+    const [appointments, workSchedules] = await Promise.all([
+      Appointment.findAll({
+        where: {
+          employeeId: { [Op.in]: ids },
+          status: "scheduled",
+          startTime: {
+            [Op.between]: [
+              new Date(`${date}T00:00:00Z`),
+              new Date(`${date}T23:59:59Z`),
+            ],
+          },
+        },
+        include: [{ model: Offering, as: "offering", attributes: ["name"] }],
+      }),
+      Schedule.findAll({
+        where: {
+          employeeId: { [Op.in]: ids },
+          dayOfWeek: dayOfWeek,
+        },
+      }),
+    ]);
+    res.status(200).json({
+      ok: true,
+      data: {
+        appointments: appointments,
+        workSchedules: workSchedules,
+      },
+    });
+  } catch (error) {
+    console.error("Error en getScheduleForEmployeesByDate:", error);
+    res.status(500).json({ ok: false, msg: "Error al obtener horarios." });
+  }
+};

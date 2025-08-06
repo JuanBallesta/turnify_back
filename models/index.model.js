@@ -84,6 +84,7 @@ db.employees.hasMany(db.schedule, {
   foreignKey: "employeeId",
   as: "schedules",
 });
+
 db.schedule.belongsTo(db.employees, {
   foreignKey: "employeeId",
   as: "employee",

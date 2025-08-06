@@ -1,7 +1,16 @@
-const router = require("express").Router();
+const Routes = require("express").Router();
 const availabilityController = require("../controllers/availability.controller");
 const authenticateToken = require("../middlewares/authMiddleware");
 
-router.get("/", authenticateToken, availabilityController.getAvailability);
+Routes.get("/", authenticateToken, availabilityController.getAvailability);
+Routes.get(
+  "/daily",
+  authenticateToken,
+  availabilityController.getDailySchedule
+);
+Routes.get(
+  "/by-employees",
+  availabilityController.getScheduleForEmployeesByDate
+);
 
-module.exports = router;
+module.exports = Routes;

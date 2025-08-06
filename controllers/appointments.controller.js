@@ -1,5 +1,8 @@
 const db = require("../models/index.model");
 const { Op } = require("sequelize");
+const {
+  buildAppointmentWhereClause,
+} = require("../helpers/appointmentQueryHelper");
 
 const appointment = db.appointments;
 const offering = db.offerings;
@@ -15,16 +18,11 @@ if (!appointment || !offering || !employee || !user || !business) {
 
 // Crear una nueva cita
 exports.createAppointment = async (req, res) => {
-  // 1. Leemos el userId DEL CUERPO de la petición.
   const { userId, employeeId, offeringId, startTime, endTime, notes, status } =
     req.body;
 
-  // 2. Obtenemos el usuario autenticado para la lógica de permisos.
   const authenticatedUser = req.user;
 
-  // --- LÓGICA DE PERMISOS ---
-  // Un cliente solo puede agendar para sí mismo.
-  // 'userId' es para quién es la cita, 'authenticatedUser.id' es quién está logueado.
   if (
     authenticatedUser.role === "client" &&
     parseInt(authenticatedUser.id) !== parseInt(userId)
@@ -34,16 +32,14 @@ exports.createAppointment = async (req, res) => {
       msg: "No puedes reservar citas para otros usuarios.",
     });
   }
-  // (Los administradores y empleados no entran en esta restricción)
 
-  // Verificación de datos
   if (!userId || !employeeId || !offeringId || !startTime || !endTime) {
     return res.status(400).json({ ok: false, msg: "Faltan datos requeridos." });
   }
 
   try {
     const newAppointment = await appointment.create({
-      userId, // <-- 3. Usamos el userId del body
+      userId,
       employeeId,
       offeringId,
       startTime,
@@ -69,114 +65,93 @@ exports.createAppointment = async (req, res) => {
 
 // Obtiene las citas relevantes para el usuario logueado
 exports.getMyAppointments = async (req, res) => {
-  const { id, role, businessId } = req.user;
-
   const page = parseInt(req.query.page, 10) || 1;
-  const limit = parseInt(req.query.limit, 10) || 10; // Convertimos 'limit' a número
-  const offset = (page - 1) * limit; // Ahora la operación es entre números
+  const limit = 10;
+  const offset = (page - 1) * limit;
+  const { search } = req.query;
 
-  const { status, search, dateFilter, view } = req.query;
   try {
-    let whereCondition = {};
+    const whereCondition = await buildAppointmentWhereClause(
+      req.user,
+      req.query
+    );
 
-    // Lógica de filtrado por rol y vista (sin cambios)
-    if (role === "administrator" && view === "personal") {
-      const adminAsClient = await user.findOne({
-        where: { email: req.user.email },
+    if (whereCondition.id === -1) {
+      return res.status(200).json({
+        ok: true,
+        data: {
+          totalItems: 0,
+          totalPages: 0,
+          currentPage: 1,
+          appointments: [],
+        },
       });
-      if (adminAsClient) {
-        whereCondition.userId = adminAsClient.id;
-      } else {
-        return res.status(200).json({
-          ok: true,
-          data: {
-            totalItems: 0,
-            totalPages: 0,
-            currentPage: 1,
-            appointments: [],
-          },
-        });
-      }
-    } else if (role === "administrator") {
-      const employeesInBusiness = await employee.findAll({
-        where: { businessId },
-        attributes: ["id"],
-      });
-      const employeeIds = employeesInBusiness.map((e) => e.id);
-      if (employeeIds.length > 0) {
-        whereCondition.employeeId = { [Op.in]: employeeIds };
-      } else {
-        return res.status(200).json({
-          ok: true,
-          data: {
-            totalItems: 0,
-            totalPages: 0,
-            currentPage: 1,
-            appointments: [],
-          },
-        });
-      }
-    } else if (role === "client") {
-      whereCondition.userId = id;
-    } else if (role === "employee") {
-      whereCondition.employeeId = id;
     }
 
-    if (status && status !== "all") {
-      whereCondition.status = status;
-    }
-
-    if (dateFilter && dateFilter !== "all") {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const endOfToday = new Date();
-      endOfToday.setHours(23, 59, 59, 999);
-      if (dateFilter === "today")
-        whereCondition.startTime = { [Op.between]: [today, endOfToday] };
-      else if (dateFilter === "upcoming")
-        whereCondition.startTime = { [Op.gte]: today };
-      else if (dateFilter === "past")
-        whereCondition.startTime = { [Op.lt]: today };
-    }
-
-    // --- ¡AQUÍ ESTÁ LA LÓGICA QUE FALTABA! ---
     let includeWhere = {};
     if (search) {
-      const searchQuery = { [Op.like]: `%${search}%` };
-      includeWhere = {
-        [Op.or]: [
-          { "$offering.name$": searchQuery },
-          { "$client.name$": searchQuery },
-          { "$client.lastName$": searchQuery },
-          { "$employee.name$": searchQuery },
-          { "$employee.lastName$": searchQuery },
-        ],
-      };
+      const searchTerm = `%${search}%`;
+      includeWhere[Op.or] = [
+        { "$offering.name$": { [Op.like]: searchTerm } },
+        { "$client.name$": { [Op.like]: searchTerm } },
+        { "$client.lastName$": { [Op.like]: searchTerm } },
+        { "$employee.name$": { [Op.like]: searchTerm } },
+        { "$employee.lastName$": { [Op.like]: searchTerm } },
+      ];
     }
 
     const { count, rows } = await appointment.findAndCountAll({
-      where: { ...whereCondition, ...includeWhere }, // Ahora 'includeWhere' existe
-      limit: limit,
-      offset: offset,
+      where: whereCondition,
       include: [
         {
           model: offering,
           as: "offering",
           include: [{ model: business, as: "business" }],
+          where: includeWhere[Op.or]
+            ? {
+                [Op.or]: includeWhere[Op.or].filter((c) =>
+                  Object.keys(c)[0].startsWith("$offering")
+                ),
+              }
+            : undefined,
+          required: search ? true : false,
         },
-        { model: employee, as: "employee" },
-        { model: user, as: "client" },
+        {
+          model: employee,
+          as: "employee",
+          where: includeWhere[Op.or]
+            ? {
+                [Op.or]: includeWhere[Op.or].filter((c) =>
+                  Object.keys(c)[0].startsWith("$employee")
+                ),
+              }
+            : undefined,
+          required: search ? true : false,
+        },
+        {
+          model: user,
+          as: "client",
+          where: includeWhere[Op.or]
+            ? {
+                [Op.or]: includeWhere[Op.or].filter((c) =>
+                  Object.keys(c)[0].startsWith("$client")
+                ),
+              }
+            : undefined,
+          required: search ? true : false,
+        },
       ],
+      limit: limit,
+      offset: offset,
       order: [["startTime", "DESC"]],
       distinct: true,
-      subQuery: false,
     });
 
     res.status(200).json({
       ok: true,
       data: {
-        totalItems: count,
-        totalPages: Math.ceil(count / limit),
+        totalItems: count.length,
+        totalPages: Math.ceil(count.length / limit),
         currentPage: page,
         appointments: rows,
       },
@@ -200,18 +175,16 @@ exports.getAppointmentStats = async (req, res) => {
       if (adminAsClient) {
         whereCondition.userId = adminAsClient.id;
       } else {
-        return res
-          .status(200)
-          .json({
-            ok: true,
-            data: {
-              total: 0,
-              scheduled: 0,
-              completed: 0,
-              cancelled: 0,
-              "no-show": 0,
-            },
-          });
+        return res.status(200).json({
+          ok: true,
+          data: {
+            total: 0,
+            scheduled: 0,
+            completed: 0,
+            cancelled: 0,
+            "no-show": 0,
+          },
+        });
       }
     } else if (role === "administrator") {
       const employeesInBusiness = await employee.findAll({
@@ -222,18 +195,16 @@ exports.getAppointmentStats = async (req, res) => {
       if (employeeIds.length > 0) {
         whereCondition.employeeId = { [Op.in]: employeeIds };
       } else {
-        return res
-          .status(200)
-          .json({
-            ok: true,
-            data: {
-              total: 0,
-              scheduled: 0,
-              completed: 0,
-              cancelled: 0,
-              "no-show": 0,
-            },
-          });
+        return res.status(200).json({
+          ok: true,
+          data: {
+            total: 0,
+            scheduled: 0,
+            completed: 0,
+            cancelled: 0,
+            "no-show": 0,
+          },
+        });
       }
     } else if (role === "client") {
       whereCondition.userId = id;
