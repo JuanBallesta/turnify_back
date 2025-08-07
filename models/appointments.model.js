@@ -30,6 +30,14 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+    cancellationReason: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    cancelledBy: {
+      type: DataTypes.ENUM("client", "staff"),
+      allowNull: true,
+    },
   });
 
   appointment.associate = function (models) {

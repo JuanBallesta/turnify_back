@@ -249,48 +249,65 @@ exports.getAppointmentStats = async (req, res) => {
 // Actualizar una cita
 exports.updateAppointment = async (req, res) => {
   const appointmentId = req.params.id;
-  const { status } = req.body;
+  const { status, cancellationReason } = req.body;
 
   try {
+    // Usamos 'appointmentToUpdate' para la instancia, evitando conflictos
     const appointmentToUpdate = await appointment.findByPk(appointmentId);
     if (!appointmentToUpdate) {
       return res.status(404).json({ ok: false, msg: "Cita no encontrada." });
     }
 
     const now = new Date();
-    const appointmentStartTime = new Date(appointmentToUpdate.startTime);
-    const hasStarted = now >= appointmentStartTime;
+    const appointmentTime = new Date(appointmentToUpdate.startTime);
+
+    // Reglas de negocio
+    if (status === "completed" || status === "no-show") {
+      if (now < appointmentTime) {
+        return res
+          .status(403)
+          .json({
+            ok: false,
+            msg: `No se puede marcar como '${status}' una cita que aún no ha comenzado.`,
+          });
+      }
+    }
 
     if (status === "cancelled") {
-      if (hasStarted)
-        return res.status(403).json({
-          ok: false,
-          msg: "No se puede cancelar una cita que ya ha comenzado.",
-        });
+      const hoursUntilAppointment = (appointmentTime - now) / (1000 * 60 * 60);
+      if (hoursUntilAppointment <= 24) {
+        return res
+          .status(403)
+          .json({
+            ok: false,
+            msg: "No se puede cancelar la cita con menos de 24 horas.",
+          });
+      }
     }
 
-    if (status === "completed" || status === "no-show") {
-      if (req.user.role === "client")
-        return res.status(403).json({
-          ok: false,
-          msg: "Un cliente no puede realizar esta acción.",
-        });
-      if (!hasStarted)
-        return res.status(403).json({
-          ok: false,
-          msg: "Esta acción solo se puede realizar después de la hora de inicio.",
-        });
-    }
+    // Construimos el objeto de actualización
+    const updateData = {};
+    if (status) updateData.status = status;
+    if (cancellationReason) updateData.cancellationReason = cancellationReason;
+    if (status === "cancelled")
+      updateData.cancelledBy = req.user.role === "client" ? "client" : "staff";
 
-    await appointmentToUpdate.update({ status });
+    await appointmentToUpdate.update(updateData);
+
     res.status(200).json({
       ok: true,
-      msg: "Estado de la cita actualizado.",
+      msg: "Cita actualizada correctamente.",
       data: appointmentToUpdate,
     });
   } catch (error) {
-    console.error("Error al actualizar la cita:", error);
-    res.status(500).json({ ok: false, msg: "Error al actualizar la cita." });
+    console.error("<<<<< ERROR FATAL AL ACTUALIZAR CITA >>>>>", error);
+    res
+      .status(500)
+      .json({
+        ok: false,
+        msg: "Error al actualizar la cita.",
+        error: error.message,
+      });
   }
 };
 
