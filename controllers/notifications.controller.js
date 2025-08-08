@@ -10,9 +10,6 @@ if (!Notification || !User || !Employee) {
   );
 }
 
-/**
- * Obtiene las notificaciones no leídas y leídas del usuario autenticado.
- */
 exports.getNotifications = async (req, res) => {
   const { id, role } = req.user;
 
@@ -29,7 +26,7 @@ exports.getNotifications = async (req, res) => {
     const notifications = await Notification.findAll({
       where: whereCondition,
       order: [["createdAt", "DESC"]],
-      limit: 30, // Traemos solo las últimas 30 para no sobrecargar
+      limit: 30,
     });
 
     res.status(200).json({
@@ -44,9 +41,6 @@ exports.getNotifications = async (req, res) => {
   }
 };
 
-/**
- * Marca todas las notificaciones del usuario como leídas.
- */
 exports.markAllAsRead = async (req, res) => {
   const { id, role } = req.user;
 
@@ -79,10 +73,6 @@ exports.markAllAsRead = async (req, res) => {
   }
 };
 
-/**
- * Marca una notificación específica como leída.
- * (Funcionalidad extra por si la necesitas en el futuro)
- */
 exports.markOneAsRead = async (req, res) => {
   const { notificationId } = req.params;
   const { id: userId, role } = req.user;
