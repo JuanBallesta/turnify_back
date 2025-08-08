@@ -1,41 +1,43 @@
+// La primera línea del archivo, sin excepción.
+// Esto carga las variables de tu archivo .env en process.env
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
-require("dotenv").config();
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000; // Es buena práctica usar process.env para el puerto
 
+// Middlewares básicos
 app.use(
   cors({
-    origin: "http://localhost:8080", // Permite solo peticiones desde tu frontend
-    methods: "GET,HEAD,PUT,PATCH,POST,DELETE", // Permite todos los métodos HTTP comunes
-    credentials: true, // Permite el envío de cookies o cabeceras de autorización
-    preflightContinue: false,
-    optionsSuccessStatus: 204,
+    origin: "http://localhost:8080",
+    credentials: true,
   })
 );
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-require("./router/index.routes")(app);
-
+// Servidor de archivos estáticos (para las fotos de perfil, etc.)
 const uploadsPath = path.join(process.cwd(), "public", "uploads");
-console.log(`Sirviendo archivos estáticos desde: ${uploadsPath}`);
 app.use("/uploads", express.static(uploadsPath));
 
+// Rutas de la API
+require("./router/index.routes")(app);
+
+// Conexión y sincronización de la base de datos
 const db = require("./models/index.model");
 db.sequelize
   .sync()
-  // .sync({ alter: true })
   .then(() => {
     console.log("Base de datos conectada y sincronizada.");
   })
   .catch((error) => {
-    console.log("Error al conectar a la base de datos: ", error);
+    console.error("Error al conectar a la base de datos:", error);
   });
 
+// Arranque del servidor
 app.listen(port, () => {
   console.log(`Servidor en funcionamiento en el puerto ${port}`);
 });

@@ -36,4 +36,7 @@ module.exports = (app) => {
 
   const publicRoutes = require("./public.routes");
   app.use("/public", publicRoutes);
+
+  const aiRoutes = require("./aiRoutes");
+  app.use("/ai", aiRoutes);
 };
