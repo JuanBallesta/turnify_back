@@ -34,6 +34,7 @@ db.employeeOffering = require("./employeeOfferings.model")(
   Sequelize
 );
 db.schedule = require("./schedule.model")(sequelize, Sequelize);
+db.notification = require("./notification.model")(sequelize, Sequelize);
 
 // Relaciones entre modelos
 
@@ -104,5 +105,23 @@ db.appointments.belongsTo(db.offerings);
 
 db.users.hasMany(db.appointments, { foreignKey: "userId" });
 db.appointments.belongsTo(db.users, { foreignKey: "userId", as: "client" });
+
+// Un Usuario (cliente) tiene muchas Notificaciones
+db.users.hasMany(db.notification, {
+  foreignKey: "userId",
+  as: "notifications",
+});
+// Un Empleado tiene muchas Notificaciones
+db.employees.hasMany(db.notification, {
+  foreignKey: "employeeId",
+  as: "notifications",
+});
+
+// Y las inversas que ya están en el modelo Notification
+db.notification.belongsTo(db.users, { foreignKey: "userId", as: "user" });
+db.notification.belongsTo(db.employees, {
+  foreignKey: "employeeId",
+  as: "employee",
+});
 
 module.exports = db;

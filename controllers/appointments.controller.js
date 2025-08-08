@@ -4,41 +4,50 @@ const {
   buildAppointmentWhereClause,
 } = require("../helpers/appointmentQueryHelper");
 
-const appointment = db.appointments;
-const offering = db.offerings;
-const employee = db.employees;
-const user = db.users;
-const business = db.businesses;
+// --- ESTANDARIZACIÓN: Usamos PascalCase para todos los modelos ---
+const Appointment = db.appointments;
+const Offering = db.offerings;
+const Employee = db.employees;
+const User = db.users;
+const Business = db.businesses;
+const Notification = db.notification; // Corregido el nombre de la variable
 
-if (!appointment || !offering || !employee || !user || !business) {
+if (
+  !Appointment ||
+  !Offering ||
+  !Employee ||
+  !User ||
+  !Business ||
+  !Notification
+) {
   console.error(
     "ERROR CRÍTICO: Uno o más modelos no se cargaron para appointments.controller."
   );
 }
 
-// Crear una nueva cita
+// --- CREAR CITA (CON TRIGGER DE NOTIFICACIÓN) ---
 exports.createAppointment = async (req, res) => {
   const { userId, employeeId, offeringId, startTime, endTime, notes, status } =
     req.body;
-
   const authenticatedUser = req.user;
 
   if (
     authenticatedUser.role === "client" &&
     parseInt(authenticatedUser.id) !== parseInt(userId)
   ) {
-    return res.status(403).json({
-      ok: false,
-      msg: "No puedes reservar citas para otros usuarios.",
-    });
+    return res
+      .status(403)
+      .json({
+        ok: false,
+        msg: "No puedes reservar citas para otros usuarios.",
+      });
   }
-
   if (!userId || !employeeId || !offeringId || !startTime || !endTime) {
     return res.status(400).json({ ok: false, msg: "Faltan datos requeridos." });
   }
 
   try {
-    const newAppointment = await appointment.create({
+    const newAppointment = await Appointment.create({
       userId,
       employeeId,
       offeringId,
@@ -48,22 +57,53 @@ exports.createAppointment = async (req, res) => {
       status: status || "scheduled",
     });
 
-    res.status(201).json({
-      ok: true,
-      msg: "Cita creada exitosamente.",
-      data: newAppointment,
+    const createdAppointment = await Appointment.findByPk(newAppointment.id, {
+      include: [
+        { model: Offering, as: "offering" },
+        { model: User, as: "client" },
+        { model: Employee, as: "employee" },
+      ],
     });
+
+    if (createdAppointment) {
+      // Notificación para el CLIENTE
+      await Notification.create({
+        userId: createdAppointment.userId,
+        message: `Tu cita para "${
+          createdAppointment.offering.name
+        }" el ${new Date(createdAppointment.startTime).toLocaleDateString(
+          "es-ES"
+        )} ha sido confirmada.`,
+        link: "/appointments",
+      });
+
+      // Notificación para el EMPLEADO
+      await Notification.create({
+        employeeId: createdAppointment.employeeId,
+        message: `Nueva cita para "${createdAppointment.offering.name}" con ${createdAppointment.client.name} ${createdAppointment.client.lastName}.`,
+        link: "/appointments",
+      });
+    }
+    res
+      .status(201)
+      .json({
+        ok: true,
+        msg: "Cita creada exitosamente.",
+        data: newAppointment,
+      });
   } catch (error) {
     console.error("<<<<< ERROR FATAL AL CREAR CITA >>>>>", error);
-    res.status(500).json({
-      ok: false,
-      msg: "Error interno al crear la cita.",
-      error: error.message,
-    });
+    res
+      .status(500)
+      .json({
+        ok: false,
+        msg: "Error interno al crear la cita.",
+        error: error.message,
+      });
   }
 };
 
-// Obtiene las citas relevantes para el usuario logueado
+// --- OBTENER CITAS (INTELIGENTE Y PAGINADO) ---
 exports.getMyAppointments = async (req, res) => {
   const page = parseInt(req.query.page, 10) || 1;
   const limit = 10;
@@ -75,17 +115,18 @@ exports.getMyAppointments = async (req, res) => {
       req.user,
       req.query
     );
-
     if (whereCondition.id === -1) {
-      return res.status(200).json({
-        ok: true,
-        data: {
-          totalItems: 0,
-          totalPages: 0,
-          currentPage: 1,
-          appointments: [],
-        },
-      });
+      return res
+        .status(200)
+        .json({
+          ok: true,
+          data: {
+            totalItems: 0,
+            totalPages: 0,
+            currentPage: 1,
+            appointments: [],
+          },
+        });
     }
 
     let includeWhere = {};
@@ -100,58 +141,31 @@ exports.getMyAppointments = async (req, res) => {
       ];
     }
 
-    const { count, rows } = await appointment.findAndCountAll({
+    const { count, rows } = await Appointment.findAndCountAll({
       where: whereCondition,
       include: [
         {
-          model: offering,
+          model: Offering,
           as: "offering",
-          include: [{ model: business, as: "business" }],
-          where: includeWhere[Op.or]
-            ? {
-                [Op.or]: includeWhere[Op.or].filter((c) =>
-                  Object.keys(c)[0].startsWith("$offering")
-                ),
-              }
-            : undefined,
-          required: search ? true : false,
+          include: [{ model: Business, as: "business" }],
         },
-        {
-          model: employee,
-          as: "employee",
-          where: includeWhere[Op.or]
-            ? {
-                [Op.or]: includeWhere[Op.or].filter((c) =>
-                  Object.keys(c)[0].startsWith("$employee")
-                ),
-              }
-            : undefined,
-          required: search ? true : false,
-        },
-        {
-          model: user,
-          as: "client",
-          where: includeWhere[Op.or]
-            ? {
-                [Op.or]: includeWhere[Op.or].filter((c) =>
-                  Object.keys(c)[0].startsWith("$client")
-                ),
-              }
-            : undefined,
-          required: search ? true : false,
-        },
+        { model: Employee, as: "employee" },
+        { model: User, as: "client" },
       ],
       limit: limit,
       offset: offset,
       order: [["startTime", "DESC"]],
       distinct: true,
+      subQuery: false, // Ayuda a evitar errores de `LIMIT` con `include`
     });
 
     res.status(200).json({
       ok: true,
       data: {
-        totalItems: count.length,
-        totalPages: Math.ceil(count.length / limit),
+        totalItems: Array.isArray(count) ? count.length : count,
+        totalPages: Math.ceil(
+          (Array.isArray(count) ? count.length : count) / limit
+        ),
         currentPage: page,
         appointments: rows,
       },
@@ -159,6 +173,88 @@ exports.getMyAppointments = async (req, res) => {
   } catch (error) {
     console.error("Error en getMyAppointments:", error);
     res.status(500).json({ ok: false, msg: "Error al obtener las citas." });
+  }
+};
+
+// --- ACTUALIZAR CITA (CON TRIGGER DE NOTIFICACIÓN) ---
+exports.updateAppointment = async (req, res) => {
+  const appointmentId = req.params.id;
+  const { status, cancellationReason } = req.body;
+
+  try {
+    // <-- Se ha corregido la sintaxis del try...catch
+    const appointmentToUpdate = await Appointment.findByPk(appointmentId, {
+      include: [
+        { model: Offering, as: "offering" },
+        { model: User, as: "client" },
+        { model: Employee, as: "employee" },
+      ],
+    });
+    if (!appointmentToUpdate) {
+      return res.status(404).json({ ok: false, msg: "Cita no encontrada." });
+    }
+
+    const oldStatus = appointmentToUpdate.status;
+    const now = new Date();
+    const appointmentTime = new Date(appointmentToUpdate.startTime);
+
+    if (status === "completed" || status === "no-show") {
+      if (now < appointmentTime)
+        return res
+          .status(403)
+          .json({
+            ok: false,
+            msg: `No se puede marcar como '${status}' una cita que aún no ha comenzado.`,
+          });
+    }
+    if (status === "cancelled") {
+      const hoursUntilAppointment = (appointmentTime - now) / (1000 * 60 * 60);
+      if (hoursUntilAppointment <= 24)
+        return res
+          .status(403)
+          .json({
+            ok: false,
+            msg: "No se puede cancelar la cita con menos de 24 horas.",
+          });
+    }
+
+    const updateData = {};
+    if (status) updateData.status = status;
+    if (cancellationReason) updateData.cancellationReason = cancellationReason;
+    if (status === "cancelled")
+      updateData.cancelledBy = req.user.role === "client" ? "client" : "staff";
+
+    await appointmentToUpdate.update(updateData);
+
+    if (status === "cancelled" && oldStatus !== "cancelled") {
+      await Notification.create({
+        userId: appointmentToUpdate.userId,
+        message: `Tu cita para "${appointmentToUpdate.offering.name}" ha sido cancelada.`,
+        link: "/appointments",
+      });
+      await Notification.create({
+        employeeId: appointmentToUpdate.employeeId,
+        message: `La cita de ${appointmentToUpdate.client.name} ${appointmentToUpdate.client.lastName} ha sido cancelada.`,
+        link: "/appointments",
+      });
+    }
+
+    res
+      .status(200)
+      .json({
+        ok: true,
+        msg: "Cita actualizada correctamente.",
+        data: appointmentToUpdate,
+      });
+  } catch (error) {
+    console.error("<<<<< ERROR FATAL AL ACTUALIZAR CITA >>>>>", error);
+    res
+      .status(500)
+      .json({
+        ok: false,
+        msg: "Error al actualizar la cita.",
+        error: error.message,
+      });
   }
 };
 
@@ -245,72 +341,6 @@ exports.getAppointmentStats = async (req, res) => {
       .json({ ok: false, msg: "Error al obtener las estadísticas." });
   }
 };
-
-// Actualizar una cita
-exports.updateAppointment = async (req, res) => {
-  const appointmentId = req.params.id;
-  const { status, cancellationReason } = req.body;
-
-  try {
-    // Usamos 'appointmentToUpdate' para la instancia, evitando conflictos
-    const appointmentToUpdate = await appointment.findByPk(appointmentId);
-    if (!appointmentToUpdate) {
-      return res.status(404).json({ ok: false, msg: "Cita no encontrada." });
-    }
-
-    const now = new Date();
-    const appointmentTime = new Date(appointmentToUpdate.startTime);
-
-    // Reglas de negocio
-    if (status === "completed" || status === "no-show") {
-      if (now < appointmentTime) {
-        return res
-          .status(403)
-          .json({
-            ok: false,
-            msg: `No se puede marcar como '${status}' una cita que aún no ha comenzado.`,
-          });
-      }
-    }
-
-    if (status === "cancelled") {
-      const hoursUntilAppointment = (appointmentTime - now) / (1000 * 60 * 60);
-      if (hoursUntilAppointment <= 24) {
-        return res
-          .status(403)
-          .json({
-            ok: false,
-            msg: "No se puede cancelar la cita con menos de 24 horas.",
-          });
-      }
-    }
-
-    // Construimos el objeto de actualización
-    const updateData = {};
-    if (status) updateData.status = status;
-    if (cancellationReason) updateData.cancellationReason = cancellationReason;
-    if (status === "cancelled")
-      updateData.cancelledBy = req.user.role === "client" ? "client" : "staff";
-
-    await appointmentToUpdate.update(updateData);
-
-    res.status(200).json({
-      ok: true,
-      msg: "Cita actualizada correctamente.",
-      data: appointmentToUpdate,
-    });
-  } catch (error) {
-    console.error("<<<<< ERROR FATAL AL ACTUALIZAR CITA >>>>>", error);
-    res
-      .status(500)
-      .json({
-        ok: false,
-        msg: "Error al actualizar la cita.",
-        error: error.message,
-      });
-  }
-};
-
 // Eliminar una cita
 exports.deleteAppointment = async (req, res) => {
   const id = req.params.id;

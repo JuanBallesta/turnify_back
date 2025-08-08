@@ -1,13 +1,13 @@
-// La primera línea del archivo, sin excepción.
-// Esto carga las variables de tu archivo .env en process.env
 require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
 
+const { startReminderCronJob } = require("./services/cron.service");
+
 const app = express();
-const port = process.env.PORT || 3000; // Es buena práctica usar process.env para el puerto
+const port = process.env.PORT || 3000;
 
 // Middlewares básicos
 app.use(
@@ -19,7 +19,6 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Servidor de archivos estáticos (para las fotos de perfil, etc.)
 const uploadsPath = path.join(process.cwd(), "public", "uploads");
 app.use("/uploads", express.static(uploadsPath));
 
@@ -30,6 +29,7 @@ require("./router/index.routes")(app);
 const db = require("./models/index.model");
 db.sequelize
   .sync()
+  // .sync({ alter: true })
   .then(() => {
     console.log("Base de datos conectada y sincronizada.");
   })
@@ -40,4 +40,5 @@ db.sequelize
 // Arranque del servidor
 app.listen(port, () => {
   console.log(`Servidor en funcionamiento en el puerto ${port}`);
+  startReminderCronJob();
 });

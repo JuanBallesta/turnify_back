@@ -39,4 +39,7 @@ module.exports = (app) => {
 
   const aiRoutes = require("./aiRoutes");
   app.use("/ai", aiRoutes);
+
+  const notificationRoutes = require("./notifications.routes");
+  app.use("/notifications", notificationRoutes);
 };
