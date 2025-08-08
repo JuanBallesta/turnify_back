@@ -6,7 +6,10 @@ const userTypes = db.userTypes;
 
 // Crear un nuevo empleado
 exports.createEmployee = async (req, res) => {
-  console.log("Backend recibió para registrar:", req.body);
+  console.log("BACKEND: Datos recibidos para crear empleado:", req.body);
+
+  // --- ¡CORRECCIÓN AQUÍ! ---
+  // Desestructuramos 'userName' (con N mayúscula) para que coincida con lo que envía el frontend.
   const {
     name,
     lastName,
@@ -16,35 +19,66 @@ exports.createEmployee = async (req, res) => {
     phone,
     businessId,
     userTypeId,
+    isActive,
   } = req.body;
 
   try {
-    // Hashear password antes de guardar
+    // Verificamos que el userName no sea undefined ANTES de hacer la consulta.
+    if (!userName) {
+      return res.status(400).json({
+        ok: false,
+        msg: "El campo 'userName' es requerido.",
+      });
+    }
+
+    // Lógica para verificar duplicados.
+    const existingEmployee = await Employee.findOne({
+      where: {
+        // Buscamos tanto por email como por el userName recibido.
+        [Op.or]: [{ email: email }, { userName: userName }],
+      },
+    });
+
+    if (existingEmployee) {
+      if (existingEmployee.email.toLowerCase() === email.toLowerCase()) {
+        return res
+          .status(409)
+          .json({ ok: false, msg: "El correo electrónico ya está en uso." });
+      }
+      if (existingEmployee.userName.toLowerCase() === userName.toLowerCase()) {
+        return res
+          .status(409)
+          .json({ ok: false, msg: "El nombre de usuario ya está en uso." });
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const newEmployee = await employee.create({
+    const newEmployee = await Employee.create({
       name,
       lastName,
-      userName,
+      userName: userName, // Asignamos el valor al campo 'userName' del modelo.
       password: hashedPassword,
       email,
       phone,
       businessId,
       userTypeId,
+      isActive: isActive ?? true,
     });
 
-    res.status(201).json({
-      ok: true,
-      msg: "Empleado creado.",
-      status: 201,
-      data: newEmployee,
-    });
+    res
+      .status(201)
+      .json({
+        ok: true,
+        msg: "Empleado creado exitosamente.",
+        data: newEmployee,
+      });
   } catch (error) {
+    console.error("<<<<< ERROR FATAL AL CREAR EMPLEADO >>>>>", error);
     res.status(500).json({
       ok: false,
-      msg: "Error al crear el empleado.",
-      status: 500,
-      data: error.message || error,
+      msg: "Error interno al registrar el usuario.",
+      error: error.message || error,
     });
   }
 };

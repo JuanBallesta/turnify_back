@@ -4,17 +4,15 @@ const jwt = require("jsonwebtoken");
 const Employee = db.employees;
 const UserType = db.userTypes;
 const Business = db.businesses;
+const User = db.users;
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-/**
- * Registra un nuevo empleado y crea su perfil de cliente asociado.
- */
 exports.register = async (req, res) => {
   const {
     name,
     lastName,
-    username,
+    userName,
     password,
     email,
     phone,
@@ -22,18 +20,18 @@ exports.register = async (req, res) => {
     userTypeId,
     isActive,
   } = req.body;
-  const t = await db.sequelize.transaction(); // Iniciar una transacción
+
+  const t = await db.sequelize.transaction();
 
   try {
-    // Verificación de duplicados en la tabla Employees
     const existingEmployee = await Employee.findOne({
       where: {
-        [db.Sequelize.Op.or]: [{ email: email }, { username: username }],
+        [db.Sequelize.Op.or]: [{ email: email }, { userName: userName }],
       },
     });
 
     if (existingEmployee) {
-      const field = existingEmployee.email === email ? "email" : "username";
+      const field = existingEmployee.email === email ? "email" : "userName";
       return res.status(409).json({
         ok: false,
         msg: `El ${field} ya está en uso.`,
@@ -48,7 +46,7 @@ exports.register = async (req, res) => {
       {
         name,
         lastName,
-        username,
+        userName,
         password: hashedPassword,
         email,
         phone,
@@ -59,29 +57,29 @@ exports.register = async (req, res) => {
       { transaction: t }
     );
 
-    // 2. Crear o encontrar la "contraparte" de Cliente en la tabla Users
-    const [clientProfile, created] = await User.findOrCreate({
+    // 2. Crear el perfil de Cliente asociado
+    await User.findOrCreate({
       where: { email: email },
       defaults: {
         name,
         lastName,
         email,
         phone,
-        username: `client_${username}`,
+        userName: `client_${userName}`,
         password: hashedPassword,
       },
       transaction: t,
     });
 
-    await t.commit(); // Confirmar ambos cambios en la base de datos
+    await t.commit();
 
     res.status(201).json({
       ok: true,
-      msg: "Empleado registrado exitosamente (con perfil de cliente asociado).",
+      msg: "Empleado registrado exitosamente.",
       data: newEmployee,
     });
   } catch (error) {
-    await t.rollback(); // Revertir la transacción si algo falla
+    await t.rollback();
     console.error("Error al registrar empleado:", error);
     res.status(500).json({
       ok: false,
@@ -91,14 +89,11 @@ exports.register = async (req, res) => {
   }
 };
 
-/**
- * Inicia sesión para un empleado (admin, superuser, etc.)
- */
 exports.login = async (req, res) => {
   const { userName, password } = req.body;
   try {
     const employee = await Employee.findOne({
-      where: { userName: userName }, // Corregido para usar la variable correcta
+      where: { userName: userName },
       include: [
         { model: UserType, as: "userType", attributes: ["name"] },
         { model: Business, as: "business", attributes: ["name"] },
@@ -161,13 +156,11 @@ exports.login = async (req, res) => {
       .json({ ok: true, msg: "Login exitoso", token, user: userResponse });
   } catch (error) {
     console.error("Error en login de admin:", error);
-    res
-      .status(500)
-      .json({
-        ok: false,
-        msg: "Error interno del servidor",
-        error: error.message,
-      });
+    res.status(500).json({
+      ok: false,
+      msg: "Error interno del servidor",
+      error: error.message,
+    });
   }
 };
 
@@ -182,7 +175,6 @@ exports.changePassword = async (req, res) => {
         .json({ ok: false, msg: "Todos los campos son requeridos." });
     }
 
-    // CAMBIO AQUÍ: Usa 'Employee' en lugar de 'User'
     const user = await Employee.findByPk(userId);
     if (!user) {
       return res.status(404).json({ ok: false, msg: "Usuario no encontrado." });

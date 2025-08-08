@@ -11,8 +11,6 @@ exports.getPublicBusinessProfile = async (req, res) => {
     const business = await Business.findOne({
       where: {
         slug: slug,
-        // --- LÍNEA ELIMINADA TEMPORALMENTE PARA DEPURAR ---
-        // isPublic: true
       },
       attributes: [
         "id",
@@ -31,9 +29,7 @@ exports.getPublicBusinessProfile = async (req, res) => {
           model: Offering,
           as: "offerings",
           where: { isActive: true },
-          // --- CAMBIO CLAVE ---
-          // 'required: false' asegura que si un negocio no tiene servicios activos,
-          // el negocio principal AÚN se devuelva.
+
           required: false,
           attributes: [
             "id",
@@ -48,7 +44,7 @@ exports.getPublicBusinessProfile = async (req, res) => {
           model: Employee,
           as: "employees",
           where: { isActive: true },
-          // Hacemos lo mismo para los empleados.
+
           required: false,
           attributes: ["id", "name", "lastName", "photo"],
         },

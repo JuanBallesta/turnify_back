@@ -11,7 +11,7 @@ Routes.get(
 );
 
 Routes.get("/", authenticateAdminToken, businessController.getAllBusinesses);
-
+Routes.get("/public/by-slug/:slug", businessController.getPublicBusinessBySlug);
 Routes.post("/", authenticateAdminToken, businessController.createBusiness);
 Routes.put("/:id", authenticateAdminToken, businessController.updateBusiness);
 Routes.delete(
