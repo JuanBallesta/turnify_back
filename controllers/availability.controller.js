@@ -29,7 +29,6 @@ exports.getAvailability = async (req, res) => {
       attributes: ["id", "name", "lastName"],
     });
 
-    // Si se especifica un employeeId, filtramos la lista de empleados a solo ese.
     if (employeeId && employeeId !== "any") {
       assignedEmployees = assignedEmployees.filter(
         (emp) => emp.id.toString() === employeeId
@@ -61,7 +60,7 @@ exports.getAvailability = async (req, res) => {
     ]);
 
     const availableSlots = [];
-    const interval = 15; // Revisar disponibilidad cada 15 minutos
+    const interval = 15;
 
     for (const employee of assignedEmployees) {
       const employeeWorkHours = workSchedules.filter(
@@ -109,7 +108,6 @@ exports.getAvailability = async (req, res) => {
       }
     }
 
-    // Si no se eligió un empleado específico, eliminamos duplicados de horarios
     const finalSlots =
       employeeId && employeeId !== "any"
         ? availableSlots

@@ -95,7 +95,7 @@ exports.createAppointment = async (req, res) => {
   }
 };
 
-// --- OBTENER CITAS (INTELIGENTE Y PAGINADO) ---
+// Obtener mis citas
 exports.getMyAppointments = async (req, res) => {
   const page = parseInt(req.query.page, 10) || 1;
   const limit = 10;
@@ -146,7 +146,7 @@ exports.getMyAppointments = async (req, res) => {
       offset: offset,
       order: [["startTime", "DESC"]],
       distinct: true,
-      subQuery: false, // Ayuda a evitar errores de `LIMIT` con `include`
+      subQuery: false,
     });
 
     res.status(200).json({
@@ -166,6 +166,7 @@ exports.getMyAppointments = async (req, res) => {
   }
 };
 
+// Actualizar cita
 exports.updateAppointment = async (req, res) => {
   const appointmentId = req.params.id;
   const { status, cancellationReason } = req.body;
@@ -238,6 +239,7 @@ exports.updateAppointment = async (req, res) => {
   }
 };
 
+// Obtener estadisticas de citas
 exports.getAppointmentStats = async (req, res) => {
   const { id, role, businessId, email } = req.user;
   const { view } = req.query;

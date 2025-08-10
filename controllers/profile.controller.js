@@ -2,7 +2,6 @@ const db = require("../models/index.model");
 const User = db.users;
 const Employee = db.employees;
 
-// --- FUNCIÓN GENÉRICA ROBUSTA ---
 const uploadProfilePhoto = async (req, res, Model) => {
   const userId = req.params.id;
   const authenticatedUser = req.user;
@@ -11,8 +10,6 @@ const uploadProfilePhoto = async (req, res, Model) => {
     `[UPLOAD PHOTO] Iniciando subida para ${Model.name}, ID: ${userId}`
   );
 
-  // Permiso: El usuario solo puede cambiar su propia foto.
-  // (La lógica para que un admin cambie la de otro se manejaría con un if/else aquí)
   if (parseInt(userId) !== parseInt(authenticatedUser.id)) {
     console.log(
       `[UPLOAD PHOTO] DENEGADO: Usuario ${authenticatedUser.id} intentó cambiar foto de ${userId}`
@@ -22,7 +19,6 @@ const uploadProfilePhoto = async (req, res, Model) => {
       .json({ ok: false, msg: "No tienes permiso para cambiar esta foto." });
   }
 
-  // Multer debería haber fallado antes si no hay archivo, pero lo verificamos de nuevo.
   if (!req.file) {
     console.log(
       "[UPLOAD PHOTO] ERROR: No se encontró req.file. Multer falló o el campo del form no es 'profilePhoto'."
@@ -43,7 +39,6 @@ const uploadProfilePhoto = async (req, res, Model) => {
       return res.status(404).json({ ok: false, msg: "Usuario no encontrado." });
     }
 
-    // Construimos la URL pública del archivo. No usamos /api.
     const photoUrl = `/uploads/${req.file.filename}`;
     console.log("[UPLOAD PHOTO] URL generada:", photoUrl);
 
@@ -67,7 +62,6 @@ const uploadProfilePhoto = async (req, res, Model) => {
   }
 };
 
-// --- EXPORTS ESPECÍFICOS (sin cambios) ---
 exports.uploadClientPhoto = (req, res) => uploadProfilePhoto(req, res, User);
 exports.uploadEmployeePhoto = (req, res) =>
   uploadProfilePhoto(req, res, Employee);

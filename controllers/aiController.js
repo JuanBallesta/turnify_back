@@ -1,5 +1,5 @@
 const axios = require("axios");
-require("dotenv").config(); // Asegúrate de que esta línea esté al principio del archivo principal (index.js)
+require("dotenv").config();
 
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GOOGLE_API_KEY}`;

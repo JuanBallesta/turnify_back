@@ -18,7 +18,6 @@ module.exports = (sequelize, Sequelize) => {
     facebook: { type: DataTypes.STRING, allowNull: true },
   });
 
-  // Hook para generar el slug automáticamente
   business.beforeValidate((business, options) => {
     if (business.name && !business.slug) {
       business.slug = business.name

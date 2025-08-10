@@ -7,9 +7,6 @@ const userTypes = db.userTypes;
 // Crear un nuevo empleado
 exports.createEmployee = async (req, res) => {
   console.log("BACKEND: Datos recibidos para crear empleado:", req.body);
-
-  // --- ¡CORRECCIÓN AQUÍ! ---
-  // Desestructuramos 'userName' (con N mayúscula) para que coincida con lo que envía el frontend.
   const {
     name,
     lastName,
@@ -23,7 +20,6 @@ exports.createEmployee = async (req, res) => {
   } = req.body;
 
   try {
-    // Verificamos que el userName no sea undefined ANTES de hacer la consulta.
     if (!userName) {
       return res.status(400).json({
         ok: false,
@@ -32,7 +28,7 @@ exports.createEmployee = async (req, res) => {
     }
 
     // Lógica para verificar duplicados.
-    const existingEmployee = await Employee.findOne({
+    const existingEmployee = await employee.findOne({
       where: {
         // Buscamos tanto por email como por el userName recibido.
         [Op.or]: [{ email: email }, { userName: userName }],
@@ -54,10 +50,10 @@ exports.createEmployee = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const newEmployee = await Employee.create({
+    const newEmployee = await employee.create({
       name,
       lastName,
-      userName: userName, // Asignamos el valor al campo 'userName' del modelo.
+      userName: userName,
       password: hashedPassword,
       email,
       phone,
@@ -66,13 +62,11 @@ exports.createEmployee = async (req, res) => {
       isActive: isActive ?? true,
     });
 
-    res
-      .status(201)
-      .json({
-        ok: true,
-        msg: "Empleado creado exitosamente.",
-        data: newEmployee,
-      });
+    res.status(201).json({
+      ok: true,
+      msg: "Empleado creado exitosamente.",
+      data: newEmployee,
+    });
   } catch (error) {
     console.error("<<<<< ERROR FATAL AL CREAR EMPLEADO >>>>>", error);
     res.status(500).json({
@@ -182,7 +176,6 @@ exports.updateEmployee = async (req, res) => {
         .json({ ok: false, msg: "Empleado no encontrado." });
     }
 
-    // --- Lógica de Permisos ---
     const isSelf = parseInt(authenticatedUser.id) === parseInt(employeeId);
     const isAdmin = authenticatedUser.role === "administrator";
     const isSuperUser = authenticatedUser.role === "superuser";
@@ -200,14 +193,13 @@ exports.updateEmployee = async (req, res) => {
       });
     }
 
-    // --- Medidas de Seguridad ---
-    // Si un empleado se edita a sí mismo (desde /profile), solo puede cambiar ciertos campos.
     if (isSelf) {
       delete dataToUpdate.businessId;
       delete dataToUpdate.userTypeId;
       delete dataToUpdate.isActive;
-      delete dataToUpdate.role; // Un usuario no puede cambiarse su propio rol
+      delete dataToUpdate.role;
     }
+
     // Nadie puede cambiar el email o el userName desde este endpoint para evitar conflictos
     delete dataToUpdate.email;
     delete dataToUpdate.userName;
@@ -229,10 +221,9 @@ exports.updateEmployee = async (req, res) => {
       ],
     });
 
-    // Construimos la respuesta consistente con el login
     const userResponse = {
       ...updatedEmployee.toJSON(),
-      role: authenticatedUser.role, // Mantenemos el rol del token
+      role: authenticatedUser.role,
       businessName: updatedEmployee.business?.name,
     };
 
@@ -240,10 +231,9 @@ exports.updateEmployee = async (req, res) => {
     res.status(200).json({
       ok: true,
       msg: "Perfil actualizado correctamente.",
-      user: userResponse, // Devolvemos en 'user' para consistencia
+      user: userResponse,
     });
   } catch (error) {
-    // --- ESTE LOG NOS DIRÁ EL PROBLEMA EXACTO ---
     console.error(
       "<<<<< ERROR FATAL AL ACTUALIZAR PERFIL DE EMPLEADO >>>>>",
       error

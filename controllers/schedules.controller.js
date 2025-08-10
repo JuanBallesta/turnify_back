@@ -6,7 +6,6 @@ if (!schedule || !employee) {
   console.error(
     "ERROR CRÍTICO: Los modelos Schedule o Employee no se cargaron correctamente."
   );
-  // En un entorno real, esto podría detener la aplicación.
 }
 
 // Obtener los horarios de un empleado específico
@@ -39,7 +38,7 @@ exports.getSchedulesByEmployee = async (req, res) => {
   }
 };
 
-// Actualizar (sobrescribir) los horarios de un empleado
+// Actualizar los horarios de un empleado
 exports.updateSchedulesForEmployee = async (req, res) => {
   const { employeeId } = req.params;
   const newSchedules = req.body;
@@ -52,7 +51,6 @@ exports.updateSchedulesForEmployee = async (req, res) => {
     return res.status(403).json({ ok: false, msg: "Acceso denegado." });
   }
 
-  // Validar que el cuerpo de la petición sea un array
   if (!Array.isArray(newSchedules)) {
     return res.status(400).json({
       ok: false,

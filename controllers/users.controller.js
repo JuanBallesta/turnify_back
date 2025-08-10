@@ -189,11 +189,7 @@ exports.deleteUser = async (req, res) => {
 };
 
 exports.uploadProfilePhoto = async (req, res) => {
-  // LOG 1: ¿Llega la petición al controlador?
   console.log("--- Petición para subir foto recibida ---");
-
-  // LOG 2: ¿Multer procesó el archivo?
-  // Si 'req.file' es undefined, multer falló o no se configuró en la ruta.
   console.log("Objeto req.file:", req.file);
   console.log("Objeto req.user (del token):", req.user);
   console.log("Parámetros de la ruta (req.params):", req.params);
@@ -210,8 +206,7 @@ exports.uploadProfilePhoto = async (req, res) => {
   }
 
   try {
-    // Asumo que tienes modelos separados User y Employee
-    const modelToUpdate = req.user.role === "client" ? db.User : db.Employee;
+    const modelToUpdate = req.user.role === "client" ? db.users : db.employees;
 
     console.log(
       `Buscando usuario con ID: ${userId} en el modelo ${modelToUpdate.name}`
@@ -264,7 +259,6 @@ exports.findUserByEmail = async (req, res) => {
       ),
     });
 
-    // 3. Verificamos el resultado
     if (!user) {
       console.log(
         `No se encontró ningún usuario con el email '${cleanedEmail}'`
@@ -283,7 +277,6 @@ exports.findUserByEmail = async (req, res) => {
 exports.searchUsers = async (req, res) => {
   const { query } = req.query;
 
-  // LOG 1: Verificar que la petición llega
   console.log(
     `BACKEND_SEARCH: Petición de búsqueda recibida. Query: "${query}"`
   );
@@ -301,7 +294,6 @@ exports.searchUsers = async (req, res) => {
     const foundUsers = await users.findAll({
       where: {
         [Op.or]: [
-          // ¡ASEGÚRATE DE QUE ESTOS NOMBRES DE COLUMNA SEAN CORRECTOS!
           { userName: { [Op.like]: searchPattern } },
           { email: { [Op.like]: searchPattern } },
         ],
@@ -310,7 +302,6 @@ exports.searchUsers = async (req, res) => {
       attributes: ["id", "name", "lastName", "email", "phone", "userName"],
     });
 
-    // LOG 2: Ver el resultado de la consulta
     console.log(
       `BACKEND_SEARCH: La consulta a la DB encontró ${foundUsers.length} usuarios.`
     );

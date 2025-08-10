@@ -54,25 +54,20 @@ exports.createOffering = async (req, res) => {
   }
 };
 
-// Obtener todos los offerings (filtrado por rol)
+// Obtener todos los offerings
 exports.getAllOfferings = async (req, res) => {
   const { role, businessId } = req.user;
-  const { context } = req.query; // 'booking' o 'management'
+  const { context } = req.query;
 
   try {
     let whereCondition = {};
 
     if (context === "booking") {
-      // Para la página de reserva, traemos TODOS los servicios ACTIVOS
       whereCondition.isActive = true;
     } else {
-      // context === 'management' o no definido
-      // Para la página de gestión, aplicamos filtros por rol
       if (role === "administrator") {
         whereCondition.businessId = businessId;
-        // No filtramos por isActive para que el admin pueda ver y activar/desactivar
       }
-      // Si es superuser, no aplicamos filtro para que vea todo
     }
 
     const offerings = await Offering.findAll({
@@ -248,7 +243,6 @@ exports.uploadOfferingPhoto = async (req, res) => {
         .json({ ok: false, msg: "Servicio no encontrado." });
     }
 
-    // Lógica de permisos: solo admins del negocio o superuser
     if (
       req.user.role === "administrator" &&
       Number(req.user.businessId) !== Number(offeringToUpdate.businessId)
@@ -259,7 +253,6 @@ exports.uploadOfferingPhoto = async (req, res) => {
       });
     }
 
-    // Construimos la URL pública (sin /api)
     const imageUrl = `/uploads/${req.file.filename}`;
 
     offeringToUpdate.image = imageUrl;

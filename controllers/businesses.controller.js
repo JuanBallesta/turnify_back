@@ -119,7 +119,6 @@ exports.updateBusiness = async (req, res) => {
   const dataToUpdate = req.body;
 
   try {
-    // 1. Buscamos el negocio a actualizar.
     const businessToUpdate = await business.findByPk(id);
     if (!businessToUpdate) {
       return res
@@ -127,7 +126,6 @@ exports.updateBusiness = async (req, res) => {
         .json({ ok: false, msg: "Negocio no encontrado para actualizar." });
     }
 
-    // 2. Lógica de permisos (solo superuser o el admin del negocio pueden editar).
     if (
       req.user.role === "administrator" &&
       Number(req.user.businessId) !== Number(id)
@@ -138,10 +136,8 @@ exports.updateBusiness = async (req, res) => {
       });
     }
 
-    // 3. Actualizamos la instancia con los nuevos datos.
     await businessToUpdate.update(dataToUpdate);
 
-    // 4. Devolvemos la respuesta de éxito con los datos actualizados.
     res.status(200).json({
       ok: true,
       msg: "Negocio actualizado correctamente.",

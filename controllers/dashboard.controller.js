@@ -4,7 +4,6 @@ const {
   buildAppointmentWhereClause,
 } = require("../helpers/appointmentQueryHelper");
 
-// Usamos los nombres estandarizados (PascalCase) de los modelos
 const Appointment = db.appointments;
 const Offering = db.offerings;
 const Employee = db.employees;
@@ -25,7 +24,6 @@ exports.getDashboardStats = async (req, res) => {
       req.query
     );
 
-    // Si la condición fuerza a no encontrar nada, devolvemos 0
     if (whereCondition.id === -1) {
       const emptyStats = {
         total: 0,
