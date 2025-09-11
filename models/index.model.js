@@ -43,6 +43,8 @@ db.employees.belongsTo(db.userTypes, {
   foreignKey: "userTypeId",
   as: "userType",
 });
+
+// Un Tipo de Usuario tiene MUCHOS Empleados
 db.userTypes.hasMany(db.employees, {
   foreignKey: "userTypeId",
   as: "employees",
@@ -111,6 +113,7 @@ db.users.hasMany(db.notification, {
   foreignKey: "userId",
   as: "notifications",
 });
+
 // Un Empleado tiene muchas Notificaciones
 db.employees.hasMany(db.notification, {
   foreignKey: "employeeId",

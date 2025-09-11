@@ -1,4 +1,5 @@
 const db = require("../models/index.model");
+const { Op } = require("sequelize");
 const bcrypt = require("bcrypt");
 const employee = db.employees;
 const business = db.businesses;
@@ -78,41 +79,61 @@ exports.createEmployee = async (req, res) => {
 };
 
 // Obtener todos los empleados con su negocio y rol asociados
-exports.getAllEmployees = (req, res) => {
-  const { businessId } = req.query;
+exports.getAllEmployees = async (req, res) => {
+  const {
+    businessId,
+    page = 1,
+    limit = 10,
+    sortBy,
+    sortOrder,
+    search,
+  } = req.query;
+  const offset = (parseInt(page, 10) - 1) * parseInt(limit, 10);
 
-  const whereCondition = {};
-  if (businessId) {
-    whereCondition.businessId = businessId;
-  }
+  try {
+    let whereCondition = {};
+    if (businessId) {
+      whereCondition.businessId = businessId;
+    }
 
-  employee
-    .findAll({
-      where: whereCondition,
+    // --- LÓGICA DE BÚSQUEDA CORREGIDA Y SIMPLIFICADA ---
+    if (search) {
+      const searchTerm = `%${search}%`;
+      // Aplicamos el filtro de búsqueda a las columnas de la tabla 'Employees'
+      whereCondition[Op.or] = [
+        { name: { [Op.like]: searchTerm } },
+        { lastName: { [Op.like]: searchTerm } },
+        { email: { [Op.like]: searchTerm } },
+        { userName: { [Op.like]: searchTerm } },
+      ];
+    }
+
+    const { count, rows } = await employee.findAndCountAll({
+      where: whereCondition, // Ahora la condición 'where' es correcta
+      limit: parseInt(limit, 10),
+      offset: offset,
       include: [
-        { model: business, as: "business", attributes: ["id", "name"] },
-        { model: userTypes, as: "userType", attributes: ["id", "name"] },
+        { model: business, as: "business" },
+        { model: userTypes, as: "userType" },
       ],
-      order: [["name", "ASC"]],
-    })
-    .then((employees) => {
-      res.status(200).json({
-        ok: true,
-        msg: "Lista de empleados.",
-        status: 200,
-        data: employees,
-      });
-    })
-    .catch((error) => {
-      res.status(500).json({
-        ok: false,
-        msg: "Error al obtener los empleados.",
-        status: 500,
-        data: error.message || error,
-      });
+      order: [[sortBy || "lastName", sortOrder || "ASC"]],
+      distinct: true,
     });
-};
 
+    res.status(200).json({
+      ok: true,
+      data: {
+        totalItems: count,
+        totalPages: Math.ceil(count / parseInt(limit, 10)),
+        currentPage: parseInt(page, 10),
+        employees: rows,
+      },
+    });
+  } catch (error) {
+    console.error("Error en getAllEmployees:", error);
+    res.status(500).json({ ok: false, msg: "Error al obtener los empleados." });
+  }
+};
 // Obtener un empleado por ID con su negocio y rol
 exports.getOneEmployee = (req, res) => {
   const id = req.params.id;
@@ -213,7 +234,6 @@ exports.updateEmployee = async (req, res) => {
 
     await employeeToUpdate.update(dataToUpdate);
 
-    // Devolvemos el empleado actualizado con sus asociaciones para refrescar el frontend
     const updatedEmployee = await employee.findByPk(employeeId, {
       include: [
         { model: business, as: "business", attributes: ["name"] },
